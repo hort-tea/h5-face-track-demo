@@ -1,7 +1,6 @@
-
-
-export function useUserCamera() {
-  return useUserMedia({
-    constraints: { video: { facingMode: "user" }, audio: false },
-  });
+export function useUserCamera(mode: "user" | "environment") {
+    mode = mode || "user";
+    return useUserMedia({
+        constraints: { video: { facingMode: mode }, audio: false },
+    });
 }
