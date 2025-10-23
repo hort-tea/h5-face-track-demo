@@ -1,13 +1,37 @@
 <template>
     <div class="app">
         <!-- <h3>Vue & Vue3 Sign Canvas 电子签名板</h3> -->
-        <SignCanvasPlus
+        <van-signature
+            class="sign-canvas"
+            ref="signatureRef"
+            @submit="onSubmit"
+            @clear="onClear"
+        />
+        <div class="action-buttons">
+            <van-button
+                size="small"
+                type="warning"
+                plain
+                @click="handleClear"
+            >
+                重签
+            </van-button>
+            <van-button
+                size="small"
+                type="primary"
+                @click="handleConfirm"
+            >
+                确定
+            </van-button>
+        </div>
+
+        <!-- <SignCanvasPlus
             class="sign-canvas"
             ref="SignCanvasPlusRef"
             :options="options"
             v-model="data"
-        />
-        <template v-if="data">
+        /> -->
+        <!-- <template v-if="data">
             <div>预览输出:</div>
             <img
                 v-show="data"
@@ -17,8 +41,8 @@
                 height="150"
                 alt="preview"
             />
-        </template>
-        <div class="control">
+        </template> -->
+        <!-- <div class="control">
             <ul>
                 <li>
                     <label>
@@ -132,8 +156,8 @@
                     </label>
                 </li>
             </ul>
-        </div>
-        <div class="sign-btns">
+        </div> -->
+        <!-- <div class="sign-btns">
             <span
                 class="clear"
                 @click="canvasClear"
@@ -158,7 +182,7 @@
             >
                 压缩
             </span>
-        </div>
+        </div> -->
     </div>
 </template>
 <script lang="ts" setup>
@@ -216,8 +240,19 @@ const downloadSignImg = () => {
 const dealImage = () => {
     SignCanvasPlusRef.value.dealImage();
 };
+const image = ref("");
+const onSubmit = (data: { image: string }) => {
+    image.value = data.image;
+};
+const onClear = () => showToast("clear");
+const signatureRef = ref<any>(null);
+const handleClear = () => signatureRef.value?.clear?.();
+const handleConfirm = () => {
+    signatureRef.value?.confirm?.();
+    navigateTo("/");
+};
 </script>
-<style>
+<style scoped>
 .preview-img {
     display: block;
     margin: 20px auto;
@@ -254,5 +289,27 @@ ul {
     text-align: center;
     margin: 20px auto;
     cursor: pointer;
+}
+.sign-canvas :deep(.van-signature__content) {
+    height: 100dvh;
+    min-height: 100vh;
+}
+:deep(.van-signature__footer) {
+    display: none;
+}
+.action-buttons {
+    position: fixed;
+    bottom: 12px;
+    right: 50px;
+    z-index: 1000;
+    display: flex;
+    gap: 8px;
+    transform: rotate(90deg);
+    transform-origin: right bottom;
+}
+@media (orientation: landscape) {
+    .action-buttons {
+        display: flex;
+    }
 }
 </style>
