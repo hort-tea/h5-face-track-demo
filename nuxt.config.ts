@@ -5,6 +5,8 @@ export default defineNuxtConfig({
     app: {
         baseURL: "/faces/",
     },
+    css: [
+        "cropperjs/dist/cropper.css"
+    ],
     modules: ["@vueuse/nuxt", "@vant/nuxt", "@unocss/nuxt"],
-    css: ["vue-advanced-cropper/dist/style.css"],
 });
