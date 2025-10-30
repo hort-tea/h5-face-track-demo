@@ -1,28 +1,28 @@
 export enum TIPS {
-    DEFAULT = "未检测到人脸, 请将正面对准手机",
-    SCANING = "正在识别，请保持姿势不变",
+    DEFAULT = "未檢測到臉部, 請將正面臉部对准手機拍攝",
+    SCANING = "正在識別，請保持姿勢不變",
 }
 
 function mediaErrorCaptured(error: any) {
     const nameMap = {
         AbortError: "操作中止",
-        NotAllowedError: "打开设备权限不足，原因是用户拒绝了媒体访问请求",
-        NotFoundError: "找不到满足条件的设备",
+        NotAllowedError: "打開設備權限不足，原因是用戶拒絕了媒體訪問請求",
+        NotFoundError: "找不到滿足條件的設備",
         NotReadableError:
-            "系统上某个硬件、浏览器或网页层面发生的错误导致设备无法被访问",
-        OverConstrainedError: "指定的要求无法被设备满足",
-        SecurityError: "安全错误，使用设备媒体被禁止",
-        TypeError: "类型错误",
+            "系統上某個硬件、瀏覽器或網頁層面發生的錯誤導致設備無法被訪問",
+        OverConstrainedError: "指定的要求無法被設備滿足",
+        SecurityError: "安全錯誤，使用設備媒體被禁止",
+        TypeError: "類型錯誤",
         NotSupportedError: "不支持的操作",
-        NetworkError: "网络错误发生",
-        TimeoutError: "操作超时",
-        UnknownError: "因未知的瞬态的原因使操作失败)",
-        ConstraintError: "条件没满足而导致事件失败的异常操作",
+        NetworkError: "網絡錯誤發生",
+        TimeoutError: "操作超時",
+        UnknownError: "因未知的瞬時的原因使操作失敗)",
+        ConstraintError: "條件沒滿足而導致事件失敗的異常操作",
     };
     const messageMap = {
-        "permission denied": "麦克风、摄像头权限未开启，请检查后重试",
-        "requested device not found": "未检测到摄像头",
-        "could not start video source": "无法访问到摄像头",
+        "permission denied": "麥克風、攝像頭權限未開啟，請檢查後重試",
+        "requested device not found": "未檢測到攝像頭",
+        "could not start video source": "無法訪問到攝像頭",
     };
 
     let nameErrorMsg = nameMap[error.name as keyof typeof nameMap];
@@ -30,7 +30,7 @@ function mediaErrorCaptured(error: any) {
         nameErrorMsg =
             messageMap[
                 error.message.toLowerCase() as keyof typeof messageMap
-            ] ?? "未知错误";
+            ] ?? "未知錯誤";
     }
     return nameErrorMsg;
 }

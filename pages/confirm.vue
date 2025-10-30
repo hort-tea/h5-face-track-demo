@@ -1,6 +1,6 @@
 <template>
     <van-nav-bar
-        title="签名确认"
+        title="簽名確認"
         left-text="返回"
         left-arrow
         @click-left="navigateTo('/signature')"
@@ -8,54 +8,95 @@
     <div class="px-4 mt-3 bg-gray-50">
         <div class="bg-white p-4">
             <PhotoStep :active="3" />
-            <div class="flex items-center justify-center mb-3">
-                <van-image
-                    class="border border-gray-300 rounded"
-                    width="80%"
-                    height="auto"
-                    fit="contain"
-                    :src="croppedImageUrl"
-                    @click="previewCroppedImage"
-                />
+            <div class="flex items-center justify-center mb-3 gap-3">
+                <!--  :src="croppedImageUrl" -->
+                <div class="flex-1 max-w-[50%]">
+                    <van-image
+                        class="border border-gray-300 rounded"
+                        height="auto"
+                        width="100%"
+                        fit="contain"
+                        :src="croppedImageUrl"
+                        @click="previewCroppedImage(croppedImageUrl)"
+                    />
+                </div>
+                <div class="flex-1 max-w-[50%]">
+                    <van-image
+                        class="border border-gray-300 rounded"
+                        height="auto"
+                        width="100%"
+                        fit="contain"
+                        :src="faceList[0]"
+                        @click="previewCroppedImage(faceList[0])"
+                    />
+                </div>
             </div>
+            <!-- 比对结果显示 -->
+            <template v-if="result">
+                <div class="text-center text-lg font-medium">
+                    比對結果：
+                    <span
+                        :class="{
+                            'text-green-600': result?.is_match,
+                            'text-red-600': !result?.is_match,
+                        }"
+                    >
+                        {{ result?.is_match ? "匹配成功" : "匹配失敗" }}
+                    </span>
+                </div>
+                <div class="text-center text-lg font-medium">
+                    相似度：
+                    <span class="text-green-600">
+                        {{ result?.percentage || 0 }}%
+                    </span>
+                </div>
+            </template>
+            <template v-else>
+                <div class="text-center text-lg font-medium">
+                    請按提交按鈕進行比對
+                </div>
+            </template>
             <!-- 当前签名显示 -->
             <div
                 v-if="currentSignature"
                 class="border border-gray-200 rounded-lg p-4"
             >
                 <div class="flex items-center justify-between mb-3">
-                    <span class="text-sm font-medium">签名时间</span>
+                    <span class="text-sm font-medium">簽名時間</span>
                     <span class="text-xs text-gray-500">
                         {{ currentSignature.date }}
                     </span>
                 </div>
-
-                <div class="flex items-center justify-center mb-3">
-                    <van-image
-                        class="border border-gray-300 rounded"
-                        width="60%"
-                        height="auto"
-                        fit="contain"
-                        :src="currentSignature.imageData"
-                        @click="previewSignature"
-                    />
+                <div class="flex items-center justify-center">
+                    <div
+                        class="relative w-[60%] h-[120px]"
+                        style="overflow: hidden"
+                    >
+                        <van-image
+                            class="absolute top-1/2 left-1/2 border border-gray-300 rounded"
+                            fit="contain"
+                            :src="currentSignature.imageData"
+                            :style="{
+                                transform:
+                                    'translate(-50%, -50%) rotate(-90deg) scale(0.8)',
+                            }"
+                        />
+                    </div>
                 </div>
             </div>
-
             <!-- 无签名提示 -->
             <div
                 v-else
                 class="text-center py-8"
             >
-                <p class="text-gray-500 mb-4">暂无保存的签名</p>
+                <p class="text-gray-500 mb-4">暂无保存的簽名</p>
                 <van-button
                     type="primary"
                     @click="navigateTo('/signature')"
                 >
-                    去签名
+                    去簽名
                 </van-button>
             </div>
-
             <!-- 操作按钮 -->
             <div
                 v-if="currentSignature"
@@ -65,30 +106,30 @@
                     type="primary"
                     block
                     @click="confirmSignature"
+                    :loading="loading"
+                    loading-text="提交中..."
                 >
-                    确认使用此签名
+                    確認提交
                 </van-button>
-
                 <van-button
                     block
                     @click="navigateTo('/signature')"
                 >
-                    重新签名
+                    重新簽名
                 </van-button>
             </div>
         </div>
     </div>
 </template>
 
-<script setup>
+<script lang="ts" setup>
 import { ref, onMounted } from "vue";
-
+const faceList = useState<string[]>("face-list", () => []);
+import { faceSimilarityByBase64 } from "@/services/face";
 // 当前签名
 const currentSignature = ref(null);
-
 // 裁切后的图片URL
 const croppedImageUrl = ref("");
-
 /**
  * 从本地存储加载裁切后的图片
  */
@@ -103,23 +144,51 @@ const loadCroppedImage = () => {
         console.error("从本地存储加载裁切图片失败:", error);
     }
 };
-
+/**
+ * 将输入统一转换为纯 base64 字符串（不含 dataURL 前缀）
+ * 支持：dataURL、blob:url、http(s) URL、相对路径或已是 base64
+ */
+const toPureBase64Async = async (data?: string | null): Promise<string> => {
+    if (!data) return "";
+    // 已是 dataURL：直接截取逗号后的部分
+    if (data.startsWith("data:")) {
+        const commaIndex = data.indexOf(",");
+        const pure = commaIndex !== -1 ? data.slice(commaIndex + 1) : data;
+        return pure;
+    }
+    // 是 URL 或 blob
+    if (
+        /^(https?:)/.test(data) ||
+        data.startsWith("blob:") ||
+        /^[./]/.test(data)
+    ) {
+        try {
+            const res = await fetch(data);
+            const blob = await res.blob();
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const result = reader.result as string;
+                    resolve(result.split(",")[1]?.replace(/^\//, "") || "");
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            return base64;
+        } catch (e) {
+            console.error("图片转 base64 失败:", e);
+            return "";
+        }
+    }
+    // 其他情况：视为已是 base64，去掉可能的起始 '/'
+    return data.replace(/^\//, "");
+};
 /**
  * 预览裁切后的图片
  */
-const previewCroppedImage = () => {
-    const imageUrl = croppedImageUrl.value;
-    const newWindow = window.open();
-    newWindow.document.write(`
-        <html>
-            <head><title>图片预览</title></head>
-            <body style="margin:0; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f5f5f5;">
-                <img src="${imageUrl}" style="max-width:90%; max-height:90%; border:1px solid #ddd; background:white;" />
-            </body>
-        </html>
-    `);
+const previewCroppedImage = (imgUrl: string) => {
+    showImagePreview([imgUrl]);
 };
-
 /**
  * 从本地存储加载当前签名
  */
@@ -152,62 +221,34 @@ const loadCurrentSignature = () => {
         currentSignature.value = null;
     }
 };
-
 /**
- * 预览签名
+ * 确认提交
  */
-const previewSignature = () => {
-    if (currentSignature.value && currentSignature.value.imageData) {
-        const newWindow = window.open();
-        newWindow.document.write(`
-            <html>
-                <head><title>签名预览</title></head>
-                <body style="margin:0; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f5f5f5;">
-                    <img src="${currentSignature.value.imageData}" style="max-width:90%; max-height:90%; border:1px solid #ddd; background:white;" />
-                </body>
-            </html>
-        `);
+const result = ref(null);
+const loading = ref(false);
+const confirmSignature = async () => {
+    loading.value = true;
+    const img1 = await toPureBase64Async(croppedImageUrl.value);
+    const img2 = await toPureBase64Async(faceList.value[0]);
+    if (!img2) {
+        alert("请先获取人脸");
+        loading.value = false;
+        return;
     }
-};
-
-/**
- * 删除当前签名
- */
-const deleteCurrentSignature = () => {
-    if (
-        confirm(
-            `确定要删除这个签名吗？\n保存时间: ${currentSignature.value.date}`
-        )
-    ) {
-        try {
-            // 从localStorage删除图片数据
-            localStorage.removeItem(currentSignature.value.key);
-
-            // 清空签名列表
-            localStorage.removeItem("signature_list");
-
-            // 清空当前签名
-            currentSignature.value = null;
-
-            console.log("删除签名成功");
-        } catch (error) {
-            console.error("删除签名失败:", error);
-            alert("删除失败，请重试");
-        }
+    if (!img1) {
+        alert("请先裁切并获取图片");
+        loading.value = false;
+        return;
     }
+    faceSimilarityByBase64({ image1: img1, image2: img2 })
+        .then((res) => {
+            loading.value = false;
+            result.value = res;
+        })
+        .catch(() => {
+            loading.value = false;
+        });
 };
-
-/**
- * 确认使用签名
- */
-const confirmSignature = () => {
-    if (currentSignature.value) {
-        console.log("确认使用签名:", currentSignature.value.key);
-        // 这里可以添加确认使用签名的逻辑
-        // 比如跳转到下一页或者保存到某个地方
-    }
-};
-
 // 页面加载时获取当前签名和裁切图片
 onMounted(() => {
     loadCurrentSignature();

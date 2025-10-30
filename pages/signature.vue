@@ -15,8 +15,28 @@
             left-text="申請人簽名(註:未成年請簽監護人姓名)"
             right-text=""
             left-arrow
-            @left-click="navigateBack('/result')"
-        ></van-nav-bar>
+            @click-left="goBackTwo"
+        >
+            <template #right>
+                <div class="flex gap-2 items-center px-4">
+                    <van-button
+                        size="small"
+                        type="warning"
+                        plain
+                        @click="canvasClear"
+                    >
+                        重簽
+                    </van-button>
+                    <van-button
+                        size="small"
+                        type="primary"
+                        @click="saveAsImg"
+                    >
+                        確定
+                    </van-button>
+                </div>
+            </template>
+        </van-nav-bar>
         <div class="sign-canvas-plus">
             <SignCanvasPlus
                 class="sign-canvas"
@@ -26,10 +46,25 @@
                 :style="{
                     transform: 'rotate(-90deg)',
                     transformOrigin: 'center center',
-                    width: `${screenWidth - 50}px`,
-                    height: `${screenHeight - 5}px`,
+                    // 保证 CSS 尺寸与内部 canvas 尺寸一致，避免坐标换算误差
+                    width: `${screenWidth - 120}px`,
+                    height: `${screenHeight - 120}px`,
+                    boxSizing: 'content-box',
+                    borderRadius: '20px',
+                    border: '2px dashed #ccc',
+                    background: '#f9f9f9 !important',
                 }"
-            />
+            ></SignCanvasPlus>
+            <!-- 居中背景提示文字 -->
+            <div
+                class="sign-overlay-text"
+                v-show="showOverlay"
+            >
+                <div class="overlay-inner">
+                    <div>請在此區域內簽名</div>
+                    <div>中文正楷簽名</div>
+                </div>
+            </div>
         </div>
         <!-- <van-signature
             class="sign-canvas"
@@ -39,21 +74,6 @@
         /> -->
         <!-- <h3>Vue & Vue3 Sign Canvas 电子签名板</h3> -->
 
-        <div class="action-buttons">
-            <van-button
-                type="warning"
-                plain
-                @click="canvasClear"
-            >
-                重签
-            </van-button>
-            <van-button
-                type="primary"
-                @click="saveAsImg"
-            >
-                确定
-            </van-button>
-        </div>
         <!-- <div class="control">
             <ul>
                 <li>
@@ -173,6 +193,10 @@
 </template>
 <script lang="ts" setup>
 import SignCanvasPlus, { IOptions } from "sign-canvas-plus";
+const router = useRouter();
+const goBackTwo = () => {
+    router.go(-1);
+};
 const screenWidth = ref<number>(0);
 const screenHeight = ref<number>(0);
 const options = ref<IOptions>({});
@@ -183,6 +207,14 @@ onMounted(() => {
     renderOptions();
 });
 const data = ref<string | null>(null);
+// 控制提示文字显隐：有签名内容隐藏，画板为空显示
+const showOverlay = ref(true);
+watch(
+    () => data.value,
+    (val) => {
+        showOverlay.value = !(val && String(val).length > 0);
+    }
+);
 const renderOptions = () => {
     options.value = reactive<IOptions>({
         isFullScreen: false, // 不使用全屏模式，使用自定义尺寸
@@ -192,10 +224,10 @@ const renderOptions = () => {
         lastWriteWidth: 3, // 下笔宽度
         lineCap: "round", // 圆形线帽，更自然
         lineJoin: "round", // 圆角连接，更平滑
-        canvasWidth: screenWidth.value - 50, // canvas宽度适应旋转后的尺寸
-        canvasHeight: screenHeight.value - 5, // canvas高度适应旋转后的尺寸
+        canvasWidth: screenWidth.value - 120, // 还原为未旋转坐标系下的宽度
+        canvasHeight: screenHeight.value - 120, // 还原为未旋转坐标系下的高度
         isShowBorder: true, // 显示边框便于定位
-        bgColor: "#ffffff", // 白色背景
+        bgColor: "#f9f9f9", // 白色背景
         borderWidth: false, // 边框宽度
         borderColor: "#e0e0e0", // 浅灰色边框
         writeWidth: 5, // 基础轨迹宽度
@@ -208,54 +240,14 @@ const renderOptions = () => {
     });
 };
 const SignCanvasPlusRef = ref<InstanceType<typeof SignCanvasPlus | null>>(null);
-
 /**
  * 清除画板
  */
 const canvasClear = () => {
     SignCanvasPlusRef.value.canvasClear();
     data.value = null; // 清除data变量
+    showOverlay.value = true; // 重新显示提示
 };
-
-/**
- * 旋转图片数据URL
- * @param {string} dataURL - 原始图片数据URL
- * @param {number} degrees - 旋转角度
- * @returns {Promise<string>} - 旋转后的图片数据URL
- */
-const rotateImage = (dataURL, degrees) => {
-    return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        img.onload = () => {
-            // 根据旋转角度设置canvas尺寸
-            if (degrees === 90 || degrees === 270) {
-                canvas.width = img.height;
-                canvas.height = img.width;
-            } else {
-                canvas.width = img.width;
-                canvas.height = img.height;
-            }
-            
-            // 移动到canvas中心
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            
-            // 旋转
-            ctx.rotate((degrees * Math.PI) / 180);
-            
-            // 绘制图片（从中心点开始）
-            ctx.drawImage(img, -img.width / 2, -img.height / 2);
-            
-            // 返回旋转后的数据URL
-            resolve(canvas.toDataURL('image/png'));
-        };
-        
-        img.src = dataURL;
-    });
-};
-
 /**
  * 保存图片
  */
@@ -265,15 +257,6 @@ const saveAsImg = async () => {
         return;
     }
     let img = SignCanvasPlusRef.value.saveAsImg();
-    
-    // 由于是横屏显示，保存时需要旋转图片
-     try {
-         img = await rotateImage(img, -90); // 逆时针旋转90度
-         console.log("图片已旋转处理");
-     } catch (error) {
-         console.error("图片旋转失败:", error);
-         // 如果旋转失败，使用原图
-     }
     // 保存到本地存储
     try {
         // 清除之前保存的签名数据
@@ -446,6 +429,7 @@ ul {
     flex: 1;
     height: calc(100% - 50px);
     min-height: 250px;
+    position: relative; /* 允许覆盖文字绝对定位 */
 }
 
 /* 横屏时的特殊样式 */
@@ -455,5 +439,27 @@ ul {
         padding: 0;
         height: calc(100% - 40px);
     }
+}
+
+/* 覆盖提示文字层 */
+.sign-overlay-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none; /* 不阻挡签名交互 */
+    z-index: 10;
+    width: 80%;
+}
+.overlay-inner {
+    text-align: center;
+    color: #8a8a8a;
+    font-size: 16px;
+    line-height: 1.6;
+}
+/* 禁用浏览器默认触控手势，确保触控坐标与绘制一致 */
+.sign-canvas {
+    touch-action: none;
+    display: block;
 }
 </style>

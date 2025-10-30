@@ -66,27 +66,27 @@ const saveFace = useThrottleFn(() => {
     if (lastFaceRect.value) {
         const displayW = v.clientWidth;
         const displayH = v.clientHeight;
-        const scaleX = sourceWidth / displayW;
-        const scaleY = sourceHeight / displayH;
+        // 当 video 使用 object-fit: cover（通过 class object-cover 设置）时，
+        // 实际显示的内容会按比例放大并居中裁切。需要计算缩放与偏移，
+        // 将显示坐标转换为源视频像素坐标，避免横向（或纵向）被压缩的错觉。
+        const scale = Math.max(displayW / sourceWidth, displayH / sourceHeight);
+        const contentW = sourceWidth * scale;
+        const contentH = sourceHeight * scale;
+        const offsetX = (displayW - contentW) / 2; // 左右被裁掉的像素（显示坐标系）
+        const offsetY = (displayH - contentH) / 2; // 上下被裁掉的像素（显示坐标系）
 
         const rect = lastFaceRect.value;
         // 人脸中心（源视频像素坐标）
-        const cx = (rect.x + rect.width / 2) * scaleX;
-        const cy = (rect.y + rect.height / 2) * scaleY;
+        const cx = (rect.x - offsetX + rect.width / 2) / scale;
+        const cy = (rect.y - offsetY + rect.height / 2) / scale;
 
-        // 以人脸宽度为基准，扩大到 2 倍作为裁剪宽度
-        const baseWidth = rect.width * scaleX;
-        const desiredWidth = Math.min(
-            Math.max(baseWidth * 2, 200),
-            sourceWidth
-        );
-        const desiredHeight = Math.min(
-            Math.floor(desiredWidth * (4 / 3)),
-            sourceHeight
-        );
-
-        sWidth = Math.min(desiredWidth, sourceWidth);
-        sHeight = Math.min(desiredHeight, sourceHeight);
+        // 以人脸宽度为基准，扩大到 2 倍作为裁剪宽度，且严格保持 3:4 比例
+        const baseWidth = rect.width / scale;
+        const desiredWidthRaw = Math.max(baseWidth * 2, 200);
+        const maxWidthByHeight = Math.floor(sourceHeight * (3 / 4));
+        const maxWidthByWidth = sourceWidth;
+        sWidth = Math.min(desiredWidthRaw, maxWidthByHeight, maxWidthByWidth);
+        sHeight = Math.floor(sWidth * (4 / 3));
 
         sx = Math.max(0, Math.floor(cx - sWidth / 2));
         sy = Math.max(0, Math.floor(cy - sHeight / 2));
@@ -115,7 +115,7 @@ const saveFace = useThrottleFn(() => {
 watchEffect(() => {
     if (faceResultList.value.length >= maxResultCount) {
         stop();
-        navigateTo("/result", {
+        navigateTo("/signature", {
             replace: true,
         });
     }
@@ -147,7 +147,7 @@ onMounted(() => {
         class="w-screen h-screen flex flex-col justify-center items-center space-y-8 box-border pb-30"
         :class="currentColor"
     >
-        <p class="text-xl px-6 text-center">{{ tips }}</p>
+        <p class="text-sm px-6 text-center">{{ tips }}</p>
         <div class="relative">
             <video
                 ref="video"

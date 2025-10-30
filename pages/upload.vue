@@ -17,8 +17,8 @@
                         :label-width="50"
                         v-model="idNumber"
                         :border="true"
-                        label="身份证"
-                        placeholder="请输入身份证字号"
+                        label="身份證"
+                        placeholder="請輸入身份證號"
                         clearable
                         input-align="left"
                         :error="idNumberError"
@@ -62,7 +62,7 @@
                                         block
                                         @click="resetImage"
                                     >
-                                        重新选择
+                                        重新選擇
                                     </van-button>
                                 </div>
                             </div>
@@ -83,7 +83,7 @@
                 </div>
                 <!-- 说明 -->
                 <div class="mt-4">
-                    <div class="flex items-start">
+                    <div class="flex items-start mb-2">
                         <div
                             class="w-6 h-6 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center mr-2"
                         >
@@ -93,7 +93,7 @@
                             請確認您的相片符合6個月內的近期照
                         </p>
                     </div>
-                    <div class="flex items-start">
+                    <div class="flex items-start mb-2">
                         <div
                             class="w-6 h-6 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center mr-2"
                         >
@@ -103,7 +103,7 @@
                             上傳檔案大小請確保清晰度並控制在2MB以下
                         </p>
                     </div>
-                    <div class="flex items-start">
+                    <div class="flex items-start mb-2">
                         <div
                             class="w-6 h-6 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center mr-2"
                         >
@@ -122,7 +122,7 @@
                         :disabled="!canUpload"
                         @click="handleUpload"
                     >
-                        上传
+                        上傳
                     </van-button>
                 </div>
             </div>
@@ -135,6 +135,18 @@
             :close-on-click-overlay="false"
         >
             <div class="h-full flex flex-col">
+                <div
+                    class="flex-1 overflow-hidden"
+                    style="min-height: 400px"
+                >
+                    <img
+                        ref="cropperWrapRef"
+                        :src="imageUrl"
+                        class="cropper-wrap"
+                        @load="initCropper"
+                        style="max-width: 100%; display: block"
+                    />
+                </div>
                 <div class="p-2 border-b">
                     <div class="flex gap-2 justify-between items-center">
                         <!-- <div class="flex gap-1">
@@ -185,14 +197,14 @@
                                 type="default"
                                 @click="toggleMirror"
                             >
-                                镜像
+                                鏡像
                             </van-button>
                             <van-button
                                 size="small"
                                 type="primary"
                                 @click="confirmCrop"
                             >
-                                确认裁剪
+                                確認裁剪
                             </van-button>
                             <van-button
                                 size="small"
@@ -203,18 +215,6 @@
                             </van-button>
                         </div>
                     </div>
-                </div>
-                <div
-                    class="flex-1 overflow-hidden"
-                    style="min-height: 400px"
-                >
-                    <img
-                        ref="cropperWrapRef"
-                        :src="imageUrl"
-                        class="cropper-wrap"
-                        @load="initCropper"
-                        style="max-width: 100%; display: block"
-                    />
                 </div>
             </div>
         </van-popup>
@@ -241,7 +241,6 @@
 
 <script setup>
 import { ref, nextTick, computed } from "vue";
-
 const fileList = ref([]); // 文件列表
 const idNumber = ref(""); // 身份证号
 const idNumberError = ref(false); // 身份证号错误状态
@@ -279,22 +278,73 @@ onMounted(() => {
 });
 
 // 身份证号码格式验证函数
+// 台湾身份证首字母映射表
+const twFirstCode = {
+    A: 10,
+    B: 11,
+    C: 12,
+    D: 13,
+    E: 14,
+    F: 15,
+    G: 16,
+    H: 17,
+    J: 18,
+    K: 19,
+    L: 20,
+    M: 21,
+    N: 22,
+    P: 23,
+    Q: 24,
+    R: 25,
+    S: 26,
+    T: 27,
+    U: 28,
+    V: 29,
+    X: 30,
+    Y: 31,
+    W: 32,
+    Z: 33,
+    I: 34,
+    O: 35,
+};
+
+function validateTWCard(id) {
+    if (!id) return false;
+    const first = id.slice(0, 1);
+    const mid = id.slice(1, 9);
+    const last = id.slice(9, 10);
+    if (!/^[A-Z]$/.test(first)) return false;
+    if (!/^\d{8}$/.test(mid)) return false;
+    if (!/^\d$/.test(last)) return false;
+    const code = twFirstCode[first.toUpperCase()];
+    if (typeof code !== "number") return false;
+    let sum = Math.floor(code / 10) + (code % 10) * 9;
+    let weight = 8;
+    for (const ch of mid) {
+        sum += Number(ch) * weight;
+        weight -= 1;
+    }
+    const expectedCheck = sum % 10 === 0 ? 0 : 10 - (sum % 10);
+    return expectedCheck === Number(last);
+}
+
+function validateIdCard10(raw) {
+    if (!raw) return false;
+    const s = String(raw).replace(/[()]/g, "");
+    if (!/^[A-Za-z]\d{9}$/.test(s)) return false;
+    const genderCode = s.charAt(1);
+    if (genderCode !== "1" && genderCode !== "2") return false;
+    return validateTWCard(s);
+}
+
 const validateIdNumber = (value) => {
     if (!value || value.trim() === "") {
-        return { isValid: false, message: "请输入证件号码" };
+        return { isValid: false, message: "請輸入身份證號" };
     }
-
-    // 正则表达式：支持多种证件号码格式
-    // [A-Z][1-2]\d{8} - 港澳通行证格式（如：H12345678）
-    // \d{18} - 18位身份证号码
-    // [a-zA-Z0-9]{10} - 10位混合字符证件号码
-    // \d{8} - 8位数字证件号码
-    const idPattern = /^(?:[A-Z][1-2]\d{8}$|\d{18}$|[a-zA-Z0-9]{10}$|\d{8}$)/;
-
-    if (!idPattern.test(value.trim())) {
-        return { isValid: false, message: "证件号码格式错误" };
+    const ok = validateIdCard10(value.trim());
+    if (!ok) {
+        return { isValid: false, message: "身份證號碼格式錯誤" };
     }
-
     return { isValid: true, message: "" };
 };
 
@@ -324,7 +374,6 @@ const handleUpload = () => {
         idNumberErrorMessage.value = validation.message;
         return;
     }
-
     // 验证通过，跳转到下一页
     navigateTo("/beforeFace");
 };
@@ -379,6 +428,8 @@ const initCropper = async () => {
                 // 事件回调
                 ready() {
                     console.log("Cropper 准备就绪");
+                    // 在 Cropper 完全构建后追加覆盖图
+                    appendOverlayToCropBox();
                 },
                 cropstart() {
                     console.log("开始裁剪");
@@ -477,6 +528,26 @@ const changeCropperStyle = (style) => {
         }
     }
 };
+// showCropper 监听弹窗变化，为裁切框添加一个参考样式
+// 追加覆盖图到裁剪框（在 Cropper ready 时机）
+function appendOverlayToCropBox() {
+    const cropBox = document.querySelector(".cropper-crop-box");
+    if (!cropBox) return;
+    // 避免重复追加
+    if (cropBox.querySelector('img[data-overlay="ckx"]')) return;
+    const overlay = document.createElement("img");
+    overlay.setAttribute("data-overlay", "ckx");
+    overlay.src = "/faces/image/ckx.png"; // 修正为实际存在的资源
+    overlay.style.position = "absolute";
+    overlay.style.top = "50%";
+    overlay.style.left = "50%";
+    overlay.style.transform = "translate(-50%, -50%)";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.zIndex = "100000";
+    overlay.style.pointerEvents = "none"; // 防止遮挡交互
+    cropBox.appendChild(overlay);
+}
 </script>
 <style scoped>
 :deep(.van-uploader__input-wrapper) {

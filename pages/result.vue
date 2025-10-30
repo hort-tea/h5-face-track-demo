@@ -6,6 +6,7 @@ const faceList = useState<string[]>("face-list", () => []);
         title="验证结果"
         left-text="返回"
         left-arrow
+        fixed
         @click-left="navigateTo('/beforeFace')"
     />
     <div class="p-4 bg-gray-50">

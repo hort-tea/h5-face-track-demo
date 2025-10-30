@@ -1,10 +1,10 @@
 <template>
     <div class="user-card">
         <van-steps :active="active">
-            <van-step>照片上传</van-step>
-            <van-step>人脸核验</van-step>
-            <van-step>签名</van-step>
-            <van-step>信息确认</van-step>
+            <van-step>照片上傳</van-step>
+            <van-step>人臉核驗</van-step>
+            <van-step>簽名</van-step>
+            <van-step>確認提交</van-step>
         </van-steps>
     </div>
 </template>
