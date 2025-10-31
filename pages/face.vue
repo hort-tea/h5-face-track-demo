@@ -115,7 +115,7 @@ const saveFace = useThrottleFn(() => {
 watchEffect(() => {
     if (faceResultList.value.length >= maxResultCount) {
         stop();
-        navigateTo("/signature", {
+        navigateTo("/result", {
             replace: true,
         });
     }

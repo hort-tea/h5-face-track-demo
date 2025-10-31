@@ -35,6 +35,10 @@
                         ></div>
                         正面臉部对准手機拍攝
                     </div>
+                    <div class="flex items-center">
+                        <div class="i-tabler:camera mr-1 color-blue-600"></div>
+                        請允許瀏覽器使用拍攝相片功能
+                    </div>
                 </div>
                 <van-button
                     type="primary"
@@ -42,6 +46,8 @@
                     :to="{ path: '/face', query: { mode: 'user' } }"
                 >
                     我是申請人本人
+                    <br />
+                    <span class="text-xs">（使用相機自拍鏡頭）</span>
                 </van-button>
                 <div class="mt-4">
                     <van-button
@@ -50,6 +56,10 @@
                         :to="{ path: '/face', query: { mode: 'environment' } }"
                     >
                         申請人需要協助
+                        <br />
+                        <span class="text-xs">
+                            （請將手機後鏡頭根據提示對準申請人）
+                        </span>
                     </van-button>
                 </div>
             </div>

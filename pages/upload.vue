@@ -134,7 +134,12 @@
             :style="{ height: '100vh' }"
             :close-on-click-overlay="false"
         >
-            <div class="h-full flex flex-col">
+            <div class="h-full flex flex-col position-relative">
+                <div
+                    class="text-red-500 bg-white p-2 bg-white tips position-absolute top-2 left-[50%] translate-x-[-50%] z-10 w-[80%]"
+                >
+                    請使用兩指縮放相片， 並將人頭盡量調整置中並位於框線內
+                </div>
                 <div
                     class="flex-1 overflow-hidden"
                     style="min-height: 400px"
@@ -145,6 +150,15 @@
                         class="cropper-wrap"
                         @load="initCropper"
                         style="max-width: 100%; display: block"
+                    />
+                </div>
+                <!-- 缩放比例 -->
+                <div
+                    class="z-10 bg-white slider-box position-absolute bottom-30 left-[50%] translate-x-[-50%] w-[80%]"
+                >
+                    <van-slider
+                        v-model="zoomRatio"
+                        @change="onChangeSlider"
                     />
                 </div>
                 <div class="p-2 border-b">
@@ -256,6 +270,12 @@ const showCropper = ref(false); // 控制裁剪弹窗显示
 watch(croppedImageUrl, (newValue) => {
     if (newValue && newValue.trim() !== "") {
         try {
+            // vuex 存储裁切後的圖片URL
+            const croppedImageUrlState = useState(
+                "useStateCroppedImageUrl",
+                () => ""
+            );
+            croppedImageUrlState.value = newValue;
             localStorage.setItem("croppedImageUrl", newValue);
             console.log("裁切后的图片已保存到本地存储");
         } catch (error) {
@@ -266,15 +286,15 @@ watch(croppedImageUrl, (newValue) => {
 
 // 页面加载时从本地存储中恢复裁切后的图片URL
 onMounted(() => {
-    try {
-        const savedCroppedImageUrl = localStorage.getItem("croppedImageUrl");
-        if (savedCroppedImageUrl) {
-            croppedImageUrl.value = savedCroppedImageUrl;
-            console.log("已从本地存储恢复裁切后的图片");
-        }
-    } catch (error) {
-        console.error("从本地存储恢复裁切图片失败:", error);
-    }
+    // try {
+    //     const savedCroppedImageUrl = localStorage.getItem("croppedImageUrl");
+    //     if (savedCroppedImageUrl) {
+    //         croppedImageUrl.value = savedCroppedImageUrl;
+    //         console.log("已从本地存储恢复裁切后的图片");
+    //     }
+    // } catch (error) {
+    //     console.error("从本地存储恢复裁切图片失败:", error);
+    // }
 });
 
 // 身份证号码格式验证函数
@@ -366,6 +386,7 @@ const canUpload = computed(() => {
 });
 
 // 处理上传按钮点击
+const idNumberState = useState("useStateIdNumber", () => "");
 const handleUpload = () => {
     // 先验证身份证号码
     const validation = validateIdNumber(idNumber.value);
@@ -374,6 +395,8 @@ const handleUpload = () => {
         idNumberErrorMessage.value = validation.message;
         return;
     }
+    // 验证通过，存储身份证号码到状态管理
+    idNumberState.value = idNumber.value;
     // 验证通过，跳转到下一页
     navigateTo("/beforeFace");
 };
@@ -430,6 +453,16 @@ const initCropper = async () => {
                     console.log("Cropper 准备就绪");
                     // 在 Cropper 完全构建后追加覆盖图
                     appendOverlayToCropBox();
+                    // 記錄圖片的初始縮放比，使滑桿 50 對應初始縮放
+                    const imgData = Croppers.value.getImageData();
+                    if (imgData && imgData.naturalWidth) {
+                        initialZoom.value =
+                            imgData.width / imgData.naturalWidth;
+                    } else {
+                        initialZoom.value = 1;
+                    }
+                    // 將滑桿設置為 50（與初始縮放一致）
+                    zoomRatio.value = 50;
                 },
                 cropstart() {
                     console.log("开始裁剪");
@@ -548,6 +581,20 @@ function appendOverlayToCropBox() {
     overlay.style.pointerEvents = "none"; // 防止遮挡交互
     cropBox.appendChild(overlay);
 }
+// 裁切比例滑桿值（0-100），50 代表初始縮放
+const zoomRatio = ref(50);
+// 記錄 Cropper 初始化後的實際縮放比（相對原始圖）
+const initialZoom = ref(1);
+// 缩放比例变化时触发：將滑桿值映射為基於初始縮放的倍率
+const onChangeSlider = (val) => {
+    if (Croppers.value) {
+        // 使 50 對應 initialZoom；向右放大、向左縮小
+        const ratio = initialZoom.value * (val / 50);
+        // 避免比例為 0
+        const safeRatio = Math.max(ratio, 0.05);
+        Croppers.value.zoomTo(safeRatio);
+    }
+};
 </script>
 <style scoped>
 :deep(.van-uploader__input-wrapper) {

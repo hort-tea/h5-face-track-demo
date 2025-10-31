@@ -12,7 +12,9 @@
                         class="i-tabler-alert-triangle text-yellow-500 text-2xl mr-3"
                     ></div>
                     <div>
-                        <p class="font-bold text-gray-800 my-0">為符合保推廣</p>
+                        <p class="font-bold text-gray-800 my-0">
+                            為符合環保推廣
+                        </p>
                         <p class="text-sm text-gray-600 mt-1 my-0">
                             本系統僅為提供申請台胞證的制證相片電子檔上傳使用,請注意以下事項:
                         </p>
@@ -64,7 +66,7 @@
                             4
                         </div>
                         <p class="text-gray-700 my-0">
-                            本平台將採用實名相片上傳測,確保您上傳的相片符合基本規範要求
+                            本平台將採用實名相片上傳檢測,確保您上傳的相片符合基本規範要求
                         </p>
                     </div>
                     <div class="flex items-start">
@@ -72,6 +74,17 @@
                             class="flex-shrink-0 w-6 h-6 bg-gray-400 text-white text-sm rounded-full flex items-center justify-center mr-3"
                         >
                             5
+                        </div>
+                        <p class="text-gray-700 my-0">
+                            操作過程中，如遇是否允許讀取檔案、
+                            拍攝相片及錄製影片的提示畫面，請點選 「允許」
+                        </p>
+                    </div>
+                    <div class="flex items-start">
+                        <div
+                            class="flex-shrink-0 w-6 h-6 bg-gray-400 text-white text-sm rounded-full flex items-center justify-center mr-3"
+                        >
+                            6
                         </div>
                         <p class="text-gray-700 my-0">
                             當您按下同意時,即代表您已同意本平台之

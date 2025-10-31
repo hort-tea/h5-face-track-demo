@@ -4,6 +4,7 @@
         :style="{
             width: screenHeight + 'px',
             height: screenWidth + 'px',
+            // 固定為竖屏視覺（容器旋轉 90°）以獲得更寬的簽名區域
             transform: 'rotate(90deg)',
             transformOrigin: `${screenHeight / 2}px ${screenWidth / 2}px`,
             left: `${(screenWidth - screenHeight) / 2}px`,
@@ -193,6 +194,7 @@
 </template>
 <script lang="ts" setup>
 import SignCanvasPlus, { IOptions } from "sign-canvas-plus";
+
 const router = useRouter();
 const goBackTwo = () => {
     router.go(-1);
@@ -200,11 +202,30 @@ const goBackTwo = () => {
 const screenWidth = ref<number>(0);
 const screenHeight = ref<number>(0);
 const options = ref<IOptions>({});
+const metaViewportRef = ref<HTMLMetaElement | null>(null);
 onMounted(() => {
     // 获取屏幕宽度和高度
     screenWidth.value = window.innerWidth;
     screenHeight.value = window.innerHeight;
     renderOptions();
+    // 動態插入 viewport meta
+    const existing = Array.from(
+        document.head.querySelectorAll('meta[name="viewport"]')
+    ).find((m) =>
+        (m.getAttribute("content") || "").includes("orientation=portrait")
+    );
+    if (existing) {
+        metaViewportRef.value = existing as HTMLMetaElement;
+    } else {
+        const meta = document.createElement("meta");
+        meta.setAttribute("name", "viewport");
+        meta.setAttribute(
+            "content",
+            "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, orientation=portrait"
+        );
+        document.head.appendChild(meta);
+        metaViewportRef.value = meta;
+    }
 });
 const data = ref<string | null>(null);
 // 控制提示文字显隐：有签名内容隐藏，画板为空显示
@@ -253,8 +274,10 @@ const canvasClear = () => {
  */
 const saveAsImg = async () => {
     if (!data.value) {
-        alert("请先签名");
-        return;
+        return showDialog({
+            title: "提示",
+            message: "请先签名",
+        });
     }
     let img = SignCanvasPlusRef.value.saveAsImg();
     // 保存到本地存储
@@ -356,6 +379,13 @@ const handleConfirm = () => {
     signatureRef.value?.confirm?.();
     navigateTo("/");
 };
+
+onUnmounted(() => {
+    if (metaViewportRef.value && metaViewportRef.value.parentNode) {
+        metaViewportRef.value.parentNode.removeChild(metaViewportRef.value);
+        metaViewportRef.value = null;
+    }
+});
 </script>
 <style scoped>
 .preview-img {

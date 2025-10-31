@@ -10,52 +10,26 @@
             <PhotoStep :active="3" />
             <div class="flex items-center justify-center mb-3 gap-3">
                 <!--  :src="croppedImageUrl" -->
-                <div class="flex-1 max-w-[50%]">
+                <div class="flex-1 max-w-[60%]">
                     <van-image
-                        class="border border-gray-300 rounded"
+                        class="border border-gray-300"
                         height="auto"
                         width="100%"
                         fit="contain"
-                        :src="croppedImageUrl"
-                        @click="previewCroppedImage(croppedImageUrl)"
-                    />
-                </div>
-                <div class="flex-1 max-w-[50%]">
-                    <van-image
-                        class="border border-gray-300 rounded"
-                        height="auto"
-                        width="100%"
-                        fit="contain"
-                        :src="faceList[0]"
-                        @click="previewCroppedImage(faceList[0])"
+                        :src="croppedImageUrlState"
+                        @click="previewCroppedImage(croppedImageUrlState)"
                     />
                 </div>
             </div>
-            <!-- 比对结果显示 -->
-            <template v-if="result">
-                <div class="text-center text-lg font-medium">
-                    比對結果：
-                    <span
-                        :class="{
-                            'text-green-600': result?.is_match,
-                            'text-red-600': !result?.is_match,
-                        }"
-                    >
-                        {{ result?.is_match ? "匹配成功" : "匹配失敗" }}
-                    </span>
-                </div>
-                <div class="text-center text-lg font-medium">
-                    相似度：
-                    <span class="text-green-600">
-                        {{ result?.percentage || 0 }}%
-                    </span>
-                </div>
-            </template>
-            <template v-else>
-                <div class="text-center text-lg font-medium">
-                    請按提交按鈕進行比對
-                </div>
-            </template>
+            <!-- 台灣身份證號顯示 -->
+            <div class="p-4 flex-1 text-center text-sm font-medium">
+                台灣身份證號：{{ idNumberState }}
+            </div>
+            <div class="text-center text-lg font-medium">
+                請您再次確認無誤後，本相片將上傳至平台
+                並做為您後續申請台胞證的制證相片使用
+                如有任何疑問，請洽本公司服務櫃台洽詢。
+            </div>
             <!-- 当前签名显示 -->
             <div
                 v-if="currentSignature"
@@ -68,19 +42,21 @@
                     </span>
                 </div>
                 <div class="flex items-center justify-center">
-                    <div
-                        class="relative w-[60%] h-[120px]"
-                        style="overflow: hidden"
-                    >
-                        <van-image
-                            class="absolute top-1/2 left-1/2 border border-gray-300 rounded"
-                            fit="contain"
-                            :src="currentSignature.imageData"
-                            :style="{
-                                transform:
-                                    'translate(-50%, -50%) rotate(-90deg) scale(0.8)',
-                            }"
-                        />
+                    <div class="relative w-[60%] h-[110px]">
+                        <div
+                            class="absolute top-1/2 left-1/2 w-full h-full"
+                            style="
+                                transform: translate(-50%, -50%) rotate(-90deg)
+                                    scale(1.6);
+                                transform-origin: center;
+                            "
+                        >
+                            <van-image
+                                class="w-full h-full border border-gray-300 rounded"
+                                fit="contain"
+                                :src="currentSignature.imageData"
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -106,7 +82,6 @@
                     type="primary"
                     block
                     @click="confirmSignature"
-                    :loading="loading"
                     loading-text="提交中..."
                 >
                     確認提交
@@ -123,66 +98,15 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from "vue";
-const faceList = useState<string[]>("face-list", () => []);
-import { faceSimilarityByBase64 } from "@/services/face";
+// 提交的數據
+const croppedImageUrlState = useState<string>(
+    "useStateCroppedImageUrl",
+    () => ""
+);
+const idNumberState = useState<string>("useStateIdNumber", () => "");
 // 当前签名
 const currentSignature = ref(null);
-// 裁切后的图片URL
-const croppedImageUrl = ref("");
-/**
- * 从本地存储加载裁切后的图片
- */
-const loadCroppedImage = () => {
-    try {
-        const savedCroppedImageUrl = localStorage.getItem("croppedImageUrl");
-        if (savedCroppedImageUrl) {
-            croppedImageUrl.value = savedCroppedImageUrl;
-            console.log("已从本地存储加载裁切后的图片");
-        }
-    } catch (error) {
-        console.error("从本地存储加载裁切图片失败:", error);
-    }
-};
-/**
- * 将输入统一转换为纯 base64 字符串（不含 dataURL 前缀）
- * 支持：dataURL、blob:url、http(s) URL、相对路径或已是 base64
- */
-const toPureBase64Async = async (data?: string | null): Promise<string> => {
-    if (!data) return "";
-    // 已是 dataURL：直接截取逗号后的部分
-    if (data.startsWith("data:")) {
-        const commaIndex = data.indexOf(",");
-        const pure = commaIndex !== -1 ? data.slice(commaIndex + 1) : data;
-        return pure;
-    }
-    // 是 URL 或 blob
-    if (
-        /^(https?:)/.test(data) ||
-        data.startsWith("blob:") ||
-        /^[./]/.test(data)
-    ) {
-        try {
-            const res = await fetch(data);
-            const blob = await res.blob();
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const result = reader.result as string;
-                    resolve(result.split(",")[1]?.replace(/^\//, "") || "");
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-            return base64;
-        } catch (e) {
-            console.error("图片转 base64 失败:", e);
-            return "";
-        }
-    }
-    // 其他情况：视为已是 base64，去掉可能的起始 '/'
-    return data.replace(/^\//, "");
-};
+
 /**
  * 预览裁切后的图片
  */
@@ -224,34 +148,25 @@ const loadCurrentSignature = () => {
 /**
  * 确认提交
  */
-const result = ref(null);
-const loading = ref(false);
-const confirmSignature = async () => {
-    loading.value = true;
-    const img1 = await toPureBase64Async(croppedImageUrl.value);
-    const img2 = await toPureBase64Async(faceList.value[0]);
-    if (!img2) {
-        alert("请先获取人脸");
-        loading.value = false;
-        return;
-    }
-    if (!img1) {
-        alert("请先裁切并获取图片");
-        loading.value = false;
-        return;
-    }
-    faceSimilarityByBase64({ image1: img1, image2: img2 })
-        .then((res) => {
-            loading.value = false;
-            result.value = res;
-        })
-        .catch(() => {
-            loading.value = false;
-        });
-};
+
 // 页面加载时获取当前签名和裁切图片
 onMounted(() => {
     loadCurrentSignature();
-    loadCroppedImage();
 });
+const confirmSignature = async () => {
+    showConfirmDialog({
+        title: "確認提交",
+        message: "是否確認提交？",
+        confirmButtonText: "確認",
+        cancelButtonText: "取消",
+    })
+        .then(async () => {
+            showToast("點擊了確認提交");
+            // 确认提交逻辑
+        })
+        .catch(() => {
+            showToast("點擊了取消提交");
+            // 取消提交逻辑
+        });
+};
 </script>
