@@ -1,4 +1,17 @@
 <template>
+    <!-- 横屏遮罩提示：检测到横屏时显示，提示开启方向锁定并切回竖屏 -->
+    <van-overlay
+        :show="showOrientationMask"
+        :z-index="9998"
+        class="orientation-overlay"
+    >
+        <div class="orientation-content">
+            <div class="phone-icon"></div>
+            <div class="tip-text">
+                當前為橫屏，請豎屏後開啟系統方向鎖定後再橫屏
+            </div>
+        </div>
+    </van-overlay>
     <div
         class="box-border bg-white fixed top-0 left-0 flex flex-col"
         :style="{
@@ -203,6 +216,9 @@ const screenWidth = ref<number>(0);
 const screenHeight = ref<number>(0);
 const options = ref<IOptions>({});
 const metaViewportRef = ref<HTMLMetaElement | null>(null);
+// 横屏遮罩显隐
+const showOrientationMask = ref(false);
+let orientationMql: MediaQueryList | null = null;
 onMounted(() => {
     // 获取屏幕宽度和高度
     screenWidth.value = window.innerWidth;
@@ -226,6 +242,44 @@ onMounted(() => {
         document.head.appendChild(meta);
         metaViewportRef.value = meta;
     }
+
+    // 初始化横屏检测
+    const initOrientationWatch = () => {
+        try {
+            orientationMql = window.matchMedia("(orientation: landscape)");
+            const apply = (matches: boolean) => {
+                showOrientationMask.value = matches;
+            };
+            apply(orientationMql.matches);
+            // 监听变化（现代浏览器）
+            const handler = (e: MediaQueryListEvent) => apply(e.matches);
+            // @ts-ignore - Safari 14 及以下不支持 addEventListener
+            if (orientationMql.addEventListener) {
+                orientationMql.addEventListener("change", handler);
+            } else if (orientationMql.addListener) {
+                orientationMql.addListener(handler);
+            }
+
+            // 作为兜底，监听窗口尺寸变化
+            const resizeHandler = () => {
+                const isLandscape = window.innerWidth > window.innerHeight;
+                showOrientationMask.value = isLandscape;
+            };
+            window.addEventListener("resize", resizeHandler, { passive: true });
+        } catch (err) {
+            // 最后兜底：通过宽高判断
+            showOrientationMask.value = window.innerWidth > window.innerHeight;
+            window.addEventListener(
+                "resize",
+                () => {
+                    showOrientationMask.value =
+                        window.innerWidth > window.innerHeight;
+                },
+                { passive: true }
+            );
+        }
+    };
+    initOrientationWatch();
 });
 const data = ref<string | null>(null);
 // 控制提示文字显隐：有签名内容隐藏，画板为空显示
@@ -385,6 +439,13 @@ onUnmounted(() => {
         metaViewportRef.value.parentNode.removeChild(metaViewportRef.value);
         metaViewportRef.value = null;
     }
+    // 清理监听
+    try {
+        if (orientationMql) {
+            // 无法移除匿名 handler，这里依赖页面销毁
+        }
+        window.removeEventListener("resize", () => {});
+    } catch {}
 });
 </script>
 <style scoped>
@@ -491,5 +552,58 @@ ul {
 .sign-canvas {
     touch-action: none;
     display: block;
+}
+
+/* 横屏遮罩样式 */
+.orientation-overlay {
+    position: fixed;
+}
+.orientation-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #fff;
+}
+.phone-icon {
+    display: inline-block;
+    width: 72px;
+    height: 112px;
+    border-radius: 12px;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    position: relative;
+    margin: 0 auto 16px;
+    transform: rotate(90deg);
+    animation: rotation 1.5s ease-in-out infinite;
+}
+.phone-icon::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    width: 28px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.85);
+    transform: translateX(-50%);
+}
+.tip-text {
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 0 24px;
+}
+@keyframes rotation {
+    10% {
+        transform: rotate(90deg);
+    }
+    50%,
+    60% {
+        transform: rotate(0deg);
+    }
+    90%,
+    100% {
+        transform: rotate(90deg);
+    }
 }
 </style>

@@ -12,7 +12,7 @@ export default defineNuxtConfig({
         server: {
             proxy: {
                 "/face-similarity.php": {
-                    target: "http://10.0.10.80/faces",
+                    target: "https://10.0.10.80/faces",
                     changeOrigin: true,
                     rewrite: (path) =>
                         path.replace(/^\/face-similarity.php/, ""),

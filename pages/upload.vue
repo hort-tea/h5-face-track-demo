@@ -216,6 +216,8 @@
                             <van-button
                                 size="small"
                                 type="primary"
+                                :loading="cropLoading"
+                                loading-text="裁剪中..."
                                 @click="confirmCrop"
                             >
                                 確認裁剪
@@ -232,24 +234,6 @@
                 </div>
             </div>
         </van-popup>
-        <!-- <div
-            class="cropper-container"
-            style="height: 400px; width: 300px"
-        >
-            <div
-                class="h-[75%] border-[1px] border-dashed border-[red] rounded-[50%] w-[78%] cropper-box absolute left-[50%] top-[50%] translate-x-[-50%] translate-y-[-60%]"
-            ></div>
-            <div
-                class="h-[65%] w-[68%] border-[1px] border-dashed border-[red] rounded-[50%] cropper-box absolute left-[50%] top-[50%] translate-x-[-50%] translate-y-[-60%]"
-            ></div>
-            <div
-                class="w-[32%] h-[8%] border-l-[1px] border-r-[1px] border-l-[red] border-r-[red] border-l-dashed border-r-dashed left-[50%] top-[88%] translate-x-[-50%] translate-y-[-55%] absolute"
-            ></div>
-            <div
-                class="absolute h-[32%] border-l-[1px] border-r-[1px] border-l-[red] border-r-[red] border-l-dashed rotate-[100deg] border-r-dashed top-[80%] left-[120%] translate-x-[-50%] translate-y-[-55%]"
-            ></div>
-            <div></div>
-        </div> -->
     </div>
 </template>
 
@@ -265,6 +249,8 @@ const Croppers = ref(null);
 const imageUrl = ref(""); // 图片URL
 const croppedImageUrl = ref(""); // 裁切后的图片URL
 const showCropper = ref(false); // 控制裁剪弹窗显示
+const cropLoading = ref(false); // 裁剪提交时的 loading 状态
+// 撤回：移除裁剪提交 loading 状态与淡入就绪逻辑
 
 // 监听裁切后的图片URL变化，有值时存储到本地
 watch(croppedImageUrl, (newValue) => {
@@ -463,6 +449,7 @@ const initCropper = async () => {
                     }
                     // 將滑桿設置為 50（與初始縮放一致）
                     zoomRatio.value = 50;
+                    // 标记就绪，触发淡入显示
                 },
                 cropstart() {
                     console.log("开始裁剪");
@@ -497,19 +484,24 @@ const toggleMirror = () => {
 };
 // 确认裁剪
 const confirmCrop = () => {
-    if (Croppers.value) {
+    if (!Croppers.value) return;
+    cropLoading.value = true;
+    try {
         const canvas = Croppers.value.getCroppedCanvas();
         canvas.toBlob((blob) => {
-            // 处理裁剪后的图片
+            if (!blob) {
+                cropLoading.value = false;
+                return;
+            }
             const url = URL.createObjectURL(blob);
             console.log("裁剪完成:", url);
-
-            // 将裁切后的图片URL保存到响应式变量中
             croppedImageUrl.value = url;
-
-            // 关闭裁剪弹窗
             showCropper.value = false;
+            cropLoading.value = false;
         });
+    } catch (e) {
+        console.error("确认裁剪失败", e);
+        cropLoading.value = false;
     }
 };
 

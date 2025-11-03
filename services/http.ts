@@ -25,9 +25,9 @@ export interface ApiError {
 // 创建 Axios 实例
 const http: AxiosInstance = axios.create({
     // baseURL: "http://10.0.10.80",
-    baseURL: "http://10.0.10.80/faces",
+    baseURL: "https://10.0.10.80/faces",
     // baseURL: "http://192.168.100.246",
-    timeout: 15000,
+    timeout: 15000000,
     headers: {
         Accept: "application/json",
     },

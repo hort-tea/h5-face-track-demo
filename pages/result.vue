@@ -15,9 +15,19 @@
                     />
                     <div
                         v-if="!result"
-                        class="text-center"
+                        class="text-center py-8"
                     >
-                        檢測中...
+                        <van-loading
+                            type="spinner"
+                            color="#1989fa"
+                            size="24px"
+                        />
+                        <div class="mt-2 loading-dots">
+                            檢測中
+                            <span class="dot dot1">.</span>
+                            <span class="dot dot2">.</span>
+                            <span class="dot dot3">.</span>
+                        </div>
                     </div>
                     <div
                         v-else
@@ -189,7 +199,11 @@ const confirmSignature = async () => {
     faceSimilarityByBase64({ image1: img1, image2: img2 })
         .then((res) => {
             loading.value = false;
-            console.log(result.value);
+            // 若返回為空，提示失敗並返回重新上傳
+            if (!res) {
+                showToast("請重新上傳相片");
+                return;
+            }
             result.value = res;
         })
         .catch(() => {
@@ -240,5 +254,31 @@ const toPureBase64Async = async (data?: string | null): Promise<string> => {
 :deep(.van-tag) {
     font-size: 21px;
     padding: 13px;
+}
+
+/* 檢測中文案的點點動畫 */
+.loading-dots .dot {
+    display: inline-block;
+    width: 1ch;
+    text-align: center;
+    opacity: 0;
+    animation: blink 1.4s infinite;
+}
+.loading-dots .dot2 {
+    animation-delay: 0.2s;
+}
+.loading-dots .dot3 {
+    animation-delay: 0.4s;
+}
+@keyframes blink {
+    0% {
+        opacity: 0;
+    }
+    30% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
 }
 </style>
