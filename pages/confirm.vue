@@ -8,7 +8,10 @@
     <div class="px-4 mt-3 bg-gray-50">
         <div class="bg-white p-4">
             <PhotoStep :active="3" />
-            <div class="flex items-center justify-center mb-3 gap-3">
+            <div
+                class="flex items-center justify-center mb-3 gap-3"
+                v-if="pageType != 3"
+            >
                 <!--  :src="croppedImageUrl" -->
                 <div class="flex-1 max-w-[60%]">
                     <van-image
@@ -23,7 +26,7 @@
             </div>
             <!-- 台灣身份證號顯示 -->
             <div class="p-4 flex-1 text-center text-sm font-medium">
-                台灣身份證號：{{ idNumberState }}
+                台灣身份證號：{{ idcard }}
             </div>
             <div class="text-center text-lg font-medium">
                 請您再次確認無誤後，本相片將上傳至平台
@@ -43,14 +46,7 @@
                 </div>
                 <div class="flex items-center justify-center">
                     <div class="relative w-[60%] h-[110px]">
-                        <div
-                            class="absolute top-1/2 left-1/2 w-full h-full"
-                            style="
-                                transform: translate(-50%, -50%) rotate(-90deg)
-                                    scale(1.6);
-                                transform-origin: center;
-                            "
-                        >
+                        <div class="w-full h-full">
                             <van-image
                                 class="w-full h-full border border-gray-300 rounded"
                                 fit="contain"
@@ -98,20 +94,41 @@
 </template>
 
 <script lang="ts" setup>
-// 提交的數據
-const croppedImageUrlState = useState<string>(
-    "useStateCroppedImageUrl",
-    () => ""
-);
-const idNumberState = useState<string>("useStateIdNumber", () => "");
+import { faceVerifyStep3 } from "@/services/face";
+import { getImage } from "@/composables/idb";
+const croppedImageUrlState = ref("");
 // 当前签名
 const currentSignature = ref(null);
-
+const pageType = ref(localStorage.getItem("pageType") || "");
 /**
  * 预览裁切后的图片
  */
 const previewCroppedImage = (imgUrl: string) => {
     showImagePreview([imgUrl]);
+};
+const dataUrlToBlob = (s: string): Blob | null => {
+    try {
+        if (!s) return null;
+        if (/^data:/.test(s)) {
+            const parts = s.split(",");
+            const meta = parts[0] || "";
+            const b64 = parts[1] || "";
+            const mimeMatch = meta.match(/^data:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+            const bin = atob(b64);
+            const len = bin.length;
+            const u8 = new Uint8Array(len);
+            for (let i = 0; i < len; i++) u8[i] = bin.charCodeAt(i);
+            return new Blob([u8], { type: mime });
+        }
+        const bin = atob(s);
+        const len = bin.length;
+        const u8 = new Uint8Array(len);
+        for (let i = 0; i < len; i++) u8[i] = bin.charCodeAt(i);
+        return new Blob([u8], { type: "image/jpeg" });
+    } catch {
+        return null;
+    }
 };
 /**
  * 从本地存储加载当前签名
@@ -121,11 +138,9 @@ const loadCurrentSignature = () => {
         const storedList = JSON.parse(
             localStorage.getItem("signature_list") || "[]"
         );
-
         if (storedList.length > 0) {
             const signatureInfo = storedList[0]; // 只有一个签名
             const imageData = localStorage.getItem(signatureInfo.key);
-
             if (imageData) {
                 currentSignature.value = {
                     ...signatureInfo,
@@ -152,7 +167,27 @@ const loadCurrentSignature = () => {
 // 页面加载时获取当前签名和裁切图片
 onMounted(() => {
     loadCurrentSignature();
+    const key = localStorage.getItem("croppedImageKey") || "";
+    if (key) {
+        getImage(key)
+            .then((blob) => {
+                if (blob) {
+                    croppedImageUrlState.value = URL.createObjectURL(blob);
+                } else {
+                    const b64 = localStorage.getItem("croppedImageUrl") || "";
+                    croppedImageUrlState.value = b64;
+                }
+            })
+            .catch(() => {
+                const b64 = localStorage.getItem("croppedImageUrl") || "";
+                croppedImageUrlState.value = b64;
+            });
+    } else {
+        const b64 = localStorage.getItem("croppedImageUrl") || "";
+        croppedImageUrlState.value = b64;
+    }
 });
+const idcard = localStorage.getItem("identity") || "";
 const confirmSignature = async () => {
     showConfirmDialog({
         title: "確認提交",
@@ -161,8 +196,72 @@ const confirmSignature = async () => {
         cancelButtonText: "取消",
     })
         .then(async () => {
-            showToast("點擊了確認提交");
-            // 确认提交逻辑
+            try {
+                let signDataUrl =
+                    localStorage.getItem("current_signature") || "";
+                if (!signDataUrl && currentSignature.value?.imageData) {
+                    signDataUrl = String(currentSignature.value.imageData);
+                }
+                if (!signDataUrl) {
+                    showToast("缺少簽名信息");
+                    return;
+                }
+                let signBlob: Blob | null = null;
+                try {
+                    signBlob = dataUrlToBlob(signDataUrl);
+                    if (!signBlob) {
+                        signBlob = await (await fetch(signDataUrl)).blob();
+                    }
+                } catch (e) {
+                    signBlob = null;
+                }
+                if (!signBlob) {
+                    showToast("簽名圖片無效");
+                    return;
+                }
+                let signFile: File | Blob = signBlob;
+                try {
+                    signFile = new File([signBlob], "sign.png", {
+                        type: "image/png",
+                    });
+                } catch (e) {
+                    console.log(e, "簽名圖片轉檔失敗");
+                    signFile = signBlob;
+                }
+                let photoPath = localStorage.getItem("photo_path") || "";
+                let xcpicPath = localStorage.getItem("xcpic_path") || "";
+                let faceScore = 0;
+                if (
+                    (!photoPath && localStorage.getItem("pageType") != 3) ||
+                    !xcpicPath
+                ) {
+                    showToast("缺少上一步的 path");
+                    return;
+                }
+                console.log(signFile, idcard, faceScore, photoPath, xcpicPath);
+                const res = await faceVerifyStep3(
+                    signFile,
+                    idcard,
+                    faceScore,
+                    photoPath,
+                    xcpicPath
+                );
+                console.log(res.code, "提交結果");
+                switch (res.code) {
+                    case 200:
+                        showToast(res.msg || "提交成功");
+                        setTimeout(() => {
+                            navigateTo("/success", { replace: true });
+                        }, 1500);
+                        break;
+                    default:
+                        showToast(res.msg || "提交失敗");
+                        break;
+                }
+            } catch (e) {
+                console.log(e, "提交過程出錯");
+                showToast(e.details.msg || "提交過程出錯");
+            }
         })
         .catch(() => {
             showToast("點擊了取消提交");

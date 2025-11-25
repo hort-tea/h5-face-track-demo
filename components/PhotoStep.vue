@@ -1,7 +1,7 @@
 <template>
     <div class="user-card">
         <van-steps :active="active">
-            <van-step>照片上傳</van-step>
+            <van-step>{{ pageType == 3 ? "信息驗證" : "照片上傳" }}</van-step>
             <van-step>人臉核驗</van-step>
             <van-step>簽名</van-step>
             <van-step>確認提交</van-step>
@@ -9,6 +9,7 @@
     </div>
 </template>
 <script setup>
+const pageType = ref(localStorage.getItem("pageType"));
 // 定义组件的props
 const props = defineProps({
     active: {

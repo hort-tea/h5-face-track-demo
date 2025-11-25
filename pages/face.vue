@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
+import { TIPS } from "@/composables/useFaceTrack";
 const route = useRoute();
-const { init, tips, tracker, video } = useFaceTrack(
+const { init, tips, tracker, video, distanceRatio } = useFaceTrack(
     (route.query.mode as "user" | "environment") || "user"
 );
 /**
@@ -19,7 +20,7 @@ const lastFaceRect = ref<{
 /**
  * 获取 9 个人头
  */
-const maxResultCount = 9;
+const maxResultCount = 3;
 /**
  * 已经获取了的人脸数
  */
@@ -39,25 +40,24 @@ const currentColor = computed(
  * 调用初始化
  */
 init();
-
 /**
  * 节流使用 canvas 保存人脸
  */
 const saveFace = useThrottleFn(() => {
+    // 太近時不保存，提示請遠一些（文案由 tips 顯示）
+    if (tips.value === TIPS.TOO_CLOSE) return;
     if (!video.value) return;
     const v = video.value;
-    // 目标画布按 3:4 比例（证件照常用比例）
-    const targetWidth = 300;
-    const targetHeight = 400;
+    // 目标画布按 4:5 比例
+    const targetWidth = 400;
+    const targetHeight = 500;
     const canvas = document.createElement("canvas");
     canvas.width = targetWidth;
     canvas.height = targetHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
     const sourceWidth = v.videoWidth;
     const sourceHeight = v.videoHeight;
-
     let sx = 0,
         sy = 0,
         sWidth = sourceWidth,
@@ -74,39 +74,53 @@ const saveFace = useThrottleFn(() => {
         const contentH = sourceHeight * scale;
         const offsetX = (displayW - contentW) / 2; // 左右被裁掉的像素（显示坐标系）
         const offsetY = (displayH - contentH) / 2; // 上下被裁掉的像素（显示坐标系）
-
         const rect = lastFaceRect.value;
         // 人脸中心（源视频像素坐标）
         const cx = (rect.x - offsetX + rect.width / 2) / scale;
         const cy = (rect.y - offsetY + rect.height / 2) / scale;
-
-        // 以人脸宽度为基准，扩大到 2 倍作为裁剪宽度，且严格保持 3:4 比例
+        // 以人脸宽度为基准，按倍数放大裁剪宽度，并严格保持 4:5 比例
         const baseWidth = rect.width / scale;
         const desiredWidthRaw = Math.max(baseWidth * 2, 200);
-        const maxWidthByHeight = Math.floor(sourceHeight * (3 / 4));
+        const maxWidthByHeight = Math.floor(sourceHeight * (4 / 5));
         const maxWidthByWidth = sourceWidth;
         sWidth = Math.min(desiredWidthRaw, maxWidthByHeight, maxWidthByWidth);
-        sHeight = Math.floor(sWidth * (4 / 3));
-
+        sHeight = Math.floor(sWidth * (5 / 4));
         sx = Math.max(0, Math.floor(cx - sWidth / 2));
         sy = Math.max(0, Math.floor(cy - sHeight / 2));
-
         if (sx + sWidth > sourceWidth) sx = sourceWidth - sWidth;
         if (sy + sHeight > sourceHeight) sy = sourceHeight - sHeight;
     } else {
-        // 无检测结果时，做居中 3:4 裁剪
+        // 无检测结果时，做居中 4:5 裁剪
         const desiredWidth = Math.min(
             sourceWidth,
-            Math.floor(sourceHeight * (3 / 4))
+            Math.floor(sourceHeight * (4 / 5))
         );
         sWidth = desiredWidth;
-        sHeight = Math.floor(desiredWidth * (4 / 3));
+        sHeight = Math.floor(desiredWidth * (5 / 4));
         sx = Math.floor((sourceWidth - sWidth) / 2);
         sy = Math.floor((sourceHeight - sHeight) / 2);
     }
-
     ctx.drawImage(v, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
-    faceResultList.value.push(canvas.toDataURL("image/png", 0.3));
+    const dataUrl = canvas.toDataURL("image/jpeg", 1);
+    faceResultList.value.push(dataUrl);
+    try {
+        const base64 = dataUrl.split(",")[1] || "";
+        const sizeBytes = Math.ceil((base64.length * 3) / 4);
+        const sizeKB = (sizeBytes / 1024).toFixed(2);
+        console.log(`[face] 保存图片大小: ${sizeBytes} bytes (${sizeKB} KB)`);
+    } catch (e) {
+        console.log("[face] 计算图片大小失败", e);
+    }
+    try {
+        if (typeof window !== "undefined") {
+            localStorage.setItem(
+                "face-list",
+                JSON.stringify(faceResultList.value)
+            );
+        }
+    } catch (e) {
+        // 忽略本地存儲異常
+    }
 }, 500);
 
 /**
@@ -148,6 +162,9 @@ onMounted(() => {
         :class="currentColor"
     >
         <p class="text-sm px-6 text-center">{{ tips }}</p>
+        <p class="text-xs px-6 text-center opacity-70">
+            距離比例：{{ (distanceRatio * 100).toFixed(0) }}%
+        </p>
         <div class="relative">
             <video
                 ref="video"
@@ -156,7 +173,8 @@ onMounted(() => {
                 webkit-playsinline
                 playsinline
                 x5-video-player-type="h5-page"
-                class="w-50 h-50 rounded-full object-cover rotate-y-180 bg-black"
+                class="w-50 h-50 rounded-full object-cover bg-black"
+                :class="((route.query.mode as 'user' | 'environment') || 'user') === 'user' ? 'rotate-y-180' : ''"
             />
             <van-circle
                 :current-rate="(currentResultCount / maxResultCount) * 100"

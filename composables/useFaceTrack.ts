@@ -1,6 +1,8 @@
 export enum TIPS {
     DEFAULT = "未檢測到臉部, 請將正面臉部对准手機拍攝",
     SCANING = "正在識別，請保持姿勢不變",
+    TOO_FAR = "距離過遠，請靠近一些",
+    TOO_CLOSE = "距離過近，請稍微遠離一些",
 }
 
 function mediaErrorCaptured(error: any) {
@@ -40,6 +42,11 @@ export function useFaceTrack(mode: "user" | "environment") {
     const { stream, start, stop } = useUserCamera(mode);
     const tips = ref<string>(TIPS.DEFAULT);
     const tracker = shallowRef<tracking.ObjectTracker>();
+    // 估算距離的比例：人臉框高度 / 視訊顯示高度
+    const distanceRatio = ref<number>(0);
+    // 可調參的距離閾值（按顯示高度的比例）：僅在 10%～40% 間截取
+    const MIN_RATIO = 0.1; // 低於則太遠
+    const MAX_RATIO = 0.5; // 高於則太近
     function initTracker() {
         tracker.value = new tracking.ObjectTracker("face");
         tracker.value.setInitialScale(4);
@@ -48,9 +55,33 @@ export function useFaceTrack(mode: "user" | "environment") {
         tracking.track(video.value!, tracker.value);
         tracker.value.on("track", (event) => {
             if (event.data.length) {
-                tips.value = TIPS.SCANING;
+                // 選擇最大的人臉框
+                const rect = event.data.reduce((max: any, curr: any) => {
+                    const areaCurr = curr.width * curr.height;
+                    const areaMax = max.width * max.height;
+                    return areaCurr > areaMax ? curr : max;
+                }, event.data[0]);
+
+                const displayH = video.value?.clientHeight || 0;
+                const faceH = rect.height || 0;
+                distanceRatio.value = displayH > 0 ? faceH / displayH : 0;
+
+                if (
+                    distanceRatio.value > 0 &&
+                    distanceRatio.value < MIN_RATIO
+                ) {
+                    tips.value = TIPS.TOO_FAR;
+                } else if (
+                    distanceRatio.value > 0 &&
+                    distanceRatio.value > MAX_RATIO
+                ) {
+                    tips.value = TIPS.TOO_CLOSE;
+                } else {
+                    tips.value = TIPS.SCANING;
+                }
             } else {
                 tips.value = TIPS.DEFAULT;
+                distanceRatio.value = 0;
             }
         });
     }
@@ -99,5 +130,6 @@ export function useFaceTrack(mode: "user" | "environment") {
         tips,
         init,
         tracker,
+        distanceRatio,
     };
 }

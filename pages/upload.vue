@@ -28,22 +28,22 @@
                     />
                 </div>
                 <!-- 上传区域（自定义样式 + 使用 Vant Uploader） -->
-
                 <div
                     class="mt-4 flex flex-col items-center justify-center text-center select-none uploader-container"
+                    v-if="pageType != 3"
                 >
                     <van-uploader
                         v-model="fileList"
                         :after-read="handleFileUpload"
                         result-type="file"
                         :multiple="false"
-                        class="w-3/5 mx-auto"
+                        class="w-[201px] mx-auto"
                     >
                         <template #default>
                             <!-- 如果有裁切后的图片，显示图片 -->
                             <div
                                 v-if="croppedImageUrl"
-                                class="border-2 border-solid border-green-400 rounded-md h-56 flex items-center justify-center overflow-hidden relative"
+                                class="border-2 border-solid border-green-400 rounded-md h-[268px] flex items-center justify-center overflow-hidden relative"
                             >
                                 <img
                                     :src="croppedImageUrl"
@@ -69,7 +69,7 @@
                             <!-- 默认上传界面 -->
                             <div
                                 v-else
-                                class="border-2 border-dashed border-blue-300 rounded-md h-56 flex flex-col items-center justify-center text-center select-none"
+                                class="border-2 border-dashed border-blue-300 rounded-md h-[268px] flex flex-col items-center justify-center text-center select-none"
                             >
                                 <div
                                     class="i-tabler:camera text-4xl color-blue-500 mb-2"
@@ -81,8 +81,22 @@
                         </template>
                     </van-uploader>
                 </div>
+
+                <div
+                    v-if="uploading"
+                    class="mt-4"
+                >
+                    <van-progress
+                        :percentage="uploadProgress"
+                        pivot-text="上傳中"
+                    />
+                </div>
+
                 <!-- 说明 -->
-                <div class="mt-4">
+                <div
+                    class="mt-4"
+                    v-if="pageType != 3"
+                >
                     <div class="flex items-start mb-2">
                         <div
                             class="w-6 h-6 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center mr-2"
@@ -122,7 +136,7 @@
                         :disabled="!canUpload"
                         @click="handleUpload"
                     >
-                        上傳
+                        {{ pageType == 3 ? "下一步" : "上傳" }}
                     </van-button>
                 </div>
             </div>
@@ -238,7 +252,9 @@
 </template>
 
 <script setup>
-import { ref, nextTick, computed } from "vue";
+import { faceVerifyStep1 } from "@/services/face";
+import { ref, nextTick, computed, watch } from "vue";
+import { putImage } from "@/composables/idb";
 const fileList = ref([]); // 文件列表
 const idNumber = ref(""); // 身份证号
 const idNumberError = ref(false); // 身份证号错误状态
@@ -250,23 +266,25 @@ const imageUrl = ref(""); // 图片URL
 const croppedImageUrl = ref(""); // 裁切后的图片URL
 const showCropper = ref(false); // 控制裁剪弹窗显示
 const cropLoading = ref(false); // 裁剪提交时的 loading 状态
+const uploading = ref(false);
+const uploadProgress = ref(0);
+const croppedFile = ref(null);
+const pageType = ref(localStorage.getItem("pageType") || "");
 // 撤回：移除裁剪提交 loading 状态与淡入就绪逻辑
-
 // 监听裁切后的图片URL变化，有值时存储到本地
-watch(croppedImageUrl, (newValue) => {
+watch(croppedImageUrl, async (newValue) => {
     if (newValue && newValue.trim() !== "") {
         try {
-            // vuex 存储裁切後的圖片URL
             const croppedImageUrlState = useState(
                 "useStateCroppedImageUrl",
                 () => ""
             );
             croppedImageUrlState.value = newValue;
-            localStorage.setItem("croppedImageUrl", newValue);
-            console.log("裁切后的图片已保存到本地存储");
-        } catch (error) {
-            console.error("保存裁切图片到本地存储失败:", error);
-        }
+            const blob = await (await fetch(newValue)).blob();
+            const key = `croppedImage-${Date.now()}`;
+            await putImage(key, blob);
+            localStorage.setItem("croppedImageKey", key);
+        } catch (error) {}
     }
 });
 
@@ -282,6 +300,58 @@ onMounted(() => {
     //     console.error("从本地存储恢复裁切图片失败:", error);
     // }
 });
+
+const urlToBase64 = async (input) => {
+    if (!input) return "";
+    if (typeof input !== "string") {
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(input);
+        });
+        const i = dataUrl.indexOf(",");
+        return i >= 0 ? dataUrl.slice(i + 1) : dataUrl;
+    }
+    if (/^data:image\//i.test(input)) {
+        const i = input.indexOf(",");
+        return i >= 0 ? input.slice(i + 1) : input;
+    }
+    try {
+        const res = await fetch(input);
+        const blob = await res.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(blob);
+        });
+        const j = dataUrl.indexOf(",");
+        return j >= 0 ? dataUrl.slice(j + 1) : dataUrl;
+    } catch (e) {
+        const dataUrl = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                const w = 300;
+                const h = 400;
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) {
+                    reject(new Error("Canvas 2D context unavailable"));
+                    return;
+                }
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL("image/jpeg", 0.92));
+            };
+            img.onerror = reject;
+            img.src = input;
+        });
+        const j = dataUrl.indexOf(",");
+        return j >= 0 ? dataUrl.slice(j + 1) : dataUrl;
+    }
+};
 
 // 身份证号码格式验证函数
 // 台湾身份证首字母映射表
@@ -364,16 +434,20 @@ const handleIdNumberInput = () => {
 // 计算属性：判断是否可以上传
 const canUpload = computed(() => {
     const validation = validateIdNumber(idNumber.value);
-    return (
-        validation.isValid &&
-        idNumber.value.trim() !== "" &&
-        croppedImageUrl.value !== ""
-    );
+    if (pageType.value == 3) {
+        return validation.isValid && idNumber.value.trim() !== "";
+    } else {
+        return (
+            validation.isValid &&
+            idNumber.value.trim() !== "" &&
+            croppedImageUrl.value !== ""
+        );
+    }
 });
 
 // 处理上传按钮点击
 const idNumberState = useState("useStateIdNumber", () => "");
-const handleUpload = () => {
+const handleUpload = async () => {
     // 先验证身份证号码
     const validation = validateIdNumber(idNumber.value);
     if (!validation.isValid) {
@@ -381,10 +455,67 @@ const handleUpload = () => {
         idNumberErrorMessage.value = validation.message;
         return;
     }
+
     // 验证通过，存储身份证号码到状态管理
     idNumberState.value = idNumber.value;
-    // 验证通过，跳转到下一页
-    navigateTo("/beforeFace");
+    if (!croppedFile.value && localStorage.getItem("pageType") != 3) {
+        showToast("請先選擇相片");
+        return;
+    }
+    uploading.value = localStorage.getItem("pageType") == 3 ? false : true;
+    uploadProgress.value = 0;
+    if (localStorage.getItem("pageType") == 3) {
+        if (localStorage.getItem("identity") != idNumber.value) {
+            showToast("验证失败：身份证号不一致");
+            return;
+        } else {
+            const baidu = localStorage.getItem("baidu");
+            const callbackUrl = localStorage.getItem("callbackUrl");
+            //跳轉到百度
+            window.location.href =
+                baidu + "&callbackUrl=" + encodeURIComponent(callbackUrl);
+            // navigateTo("/beforeFace");
+        }
+    } else {
+        try {
+            const payloadFile = croppedFile.value;
+            console.log(payloadFile, "payloadFile");
+            if (!payloadFile && localStorage.getItem("pageType") != 3) {
+                showToast("裁切文件無法讀取");
+                return;
+            }
+            const res = await faceVerifyStep1(payloadFile, idNumber.value, {
+                onUploadProgress: (e) => {
+                    if (e.total) {
+                        uploadProgress.value = Math.round(
+                            (e.loaded / e.total) * 100
+                        );
+                    }
+                },
+            });
+            // 在本地存储 faceVerifyStep1中 result的响应
+            localStorage.setItem("step1", JSON.stringify(res.result.data));
+            localStorage.setItem("step1Log", JSON.stringify(res.log_data));
+            // navigateTo("/beforeFace");
+            const baidu = localStorage.getItem("baidu");
+            let callbackUrl = localStorage.getItem("callbackUrl");
+            callbackUrl = `${callbackUrl}&ppath=${
+                res.result.data?.path || ""
+            }&l=${encodeURIComponent(JSON.stringify(res.log_data))}`;
+            window.location.href =
+                baidu + "&callbackUrl=" + encodeURIComponent(callbackUrl);
+            console.log(
+                baidu + "&callbackUrl=" + encodeURIComponent(callbackUrl)
+            );
+            console.log(baidu + encodeURIComponent(callbackUrl));
+            // debugger;
+        } catch (e) {
+            console.log(e, "e");
+            showToast(e.details.msg || "上傳失敗");
+        } finally {
+            uploading.value = false;
+        }
+    }
 };
 
 // 处理文件上传
@@ -411,7 +542,6 @@ const initCropper = async () => {
         try {
             // 动态导入 Cropper.js
             const { default: Cropper } = await import("cropperjs");
-
             // 如果已有实例，先销毁
             if (Croppers.value) {
                 Croppers.value.destroy();
@@ -423,6 +553,7 @@ const initCropper = async () => {
                 autoCropArea: 0.8, // 自动裁剪区域大小
                 responsive: true, // 响应式
                 zoomOnWheel: true, // 鼠标滚轮缩放
+                zoomOnTouch: true, // 触摸缩放（移动端手势）
                 cropBoxMovable: true, // 裁剪框可移动
                 cropBoxResizable: true, // 裁剪框可调整大小
                 background: true, // 显示网格背景
@@ -488,17 +619,35 @@ const confirmCrop = () => {
     cropLoading.value = true;
     try {
         const canvas = Croppers.value.getCroppedCanvas();
-        canvas.toBlob((blob) => {
-            if (!blob) {
+        canvas.toBlob(
+            async (blob) => {
+                let b = blob;
+                if (!b || !b.type || !/image\/jpeg/i.test(b.type)) {
+                    try {
+                        const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+                        b = await (await fetch(dataUrl)).blob();
+                    } catch (e) {}
+                }
+                if (!b) {
+                    cropLoading.value = false;
+                    return;
+                }
+                const url = URL.createObjectURL(b);
+                croppedImageUrl.value = url;
+                try {
+                    const f = new File([b], "cropped.jpg", {
+                        type: "image/jpeg",
+                    });
+                    croppedFile.value = f;
+                } catch (e) {
+                    croppedFile.value = null;
+                }
+                showCropper.value = false;
                 cropLoading.value = false;
-                return;
-            }
-            const url = URL.createObjectURL(blob);
-            console.log("裁剪完成:", url);
-            croppedImageUrl.value = url;
-            showCropper.value = false;
-            cropLoading.value = false;
-        });
+            },
+            "image/jpeg",
+            0.92
+        );
     } catch (e) {
         console.error("确认裁剪失败", e);
         cropLoading.value = false;
@@ -591,6 +740,12 @@ const onChangeSlider = (val) => {
 <style scoped>
 :deep(.van-uploader__input-wrapper) {
     width: 100%;
+}
+
+/* 防止 iOS Safari 因输入框字体过小触发页面缩放 */
+:deep(input),
+:deep(.van-field__control) {
+    font-size: 16px;
 }
 
 /* 自定义裁切框样式 */

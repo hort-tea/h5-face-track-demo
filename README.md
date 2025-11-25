@@ -35,6 +35,18 @@ pnpm dev
 
 核心代码在 [useFaceTrack.ts](./composables/useFaceTrack.ts) 中
 
+## 横屏模式支持与已知限制
+
+- 横屏检测：优先使用 `screen.orientation`，在不支持的环境下使用 `matchMedia('(orientation: landscape)')` 与窗口尺寸比对降级。
+- 布局适配：页面容器按角度旋转并在横竖屏切换时同步宽高，签字板使用固定旋转与尺寸同步，避免坐标错位。
+- 轨迹保持：旋转时对当前画布进行快照，与历史背景进行图像合成叠加，保证既有笔迹方向与新坐标系一致。
+- 触控兼容：签字板禁用默认触控手势（`touch-action: none`），横屏状态下坐标系与手势识别保持一致。
+- 字体与媒体自适应：覆盖提示与文案字号使用 `clamp()` 响应式处理，图片采用 `object-fit: contain`。
+- 已知限制：
+  - `screen.orientation` 在 iOS Safari 不可用，依赖 `matchMedia` 与窗口尺寸降级检测。
+  - 旋转切换瞬间可能出现轻微重绘或抖动，属于正常过渡。
+  - `meta[name="viewport"][content*="orientation=portrait"]` 为兼容标签，部分浏览器可能忽略。
+
 ## 测试设备
 
 测试标准为能正确获取摄像头视频流，能使用 tracking 识别人脸，能在结果页展示人脸

@@ -4,19 +4,42 @@ export default defineNuxtConfig({
     devServer: {
         port: 3000,
     },
-    devtools: { enabled: true },
+    devtools: { enabled: false },
     app: {
-        baseURL: "/faces/",
+        baseURL: process.env.NUXT_APP_BASE_URL,
+        head: {
+            meta: [
+                {
+                    name: "viewport",
+                    content:
+                        "width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no",
+                },
+            ],
+        },
     },
     vite: {
         server: {
             proxy: {
+                // "/face-similarity.php": {
+                //     target: "https://10.0.10.80/faces",
+                //     changeOrigin: true,
+                //     rewrite: (path) =>
+                //         path.replace(/^\/face-similarity.php/, ""),
+                // },
                 "/face-similarity.php": {
-                    target: "https://10.0.10.80/faces",
+                    target: "https://check1.cheertravel.com.hk/faces",
                     changeOrigin: true,
-                    rewrite: (path) =>
-                        path.replace(/^\/face-similarity.php/, ""),
+                    rewrite: (path) => {
+                        return path.replace(/^\/face-similarity.php/, "");
+                    },
                 },
+                // "/face-similarity.php": {
+                //     target: "https://vfy.tbkservice.cn/faces",
+                //     changeOrigin: true,
+                //     rewrite: (path) => {
+                //         return path.replace(/^\/face-similarity.php/, "");
+                //     },
+                // },
                 // "/face-similarity.php": {
                 //     target: "http://192.168.100.246/faces",
                 //     changeOrigin: true,

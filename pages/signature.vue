@@ -1,7 +1,7 @@
 <template>
     <!-- 横屏遮罩提示：检测到横屏时显示，提示开启方向锁定并切回竖屏 -->
     <van-overlay
-        :show="showOrientationMask"
+        :show="showOrientationMask && !orientationSupported"
         :z-index="9998"
         class="orientation-overlay"
     >
@@ -12,16 +12,20 @@
             </div>
         </div>
     </van-overlay>
+    <!-- 用于屏幕未旋转时的样式 -->
     <div
+        v-if="!isRotate"
         class="box-border bg-white fixed top-0 left-0 flex flex-col"
+        id="page-container"
+        ref="pageContainerRef"
         :style="{
             width: screenHeight + 'px',
             height: screenWidth + 'px',
             // 固定為竖屏視覺（容器旋轉 90°）以獲得更寬的簽名區域
-            transform: 'rotate(90deg)',
-            transformOrigin: `${screenHeight / 2}px ${screenWidth / 2}px`,
-            left: `${(screenWidth - screenHeight) / 2}px`,
-            top: `${(screenHeight - screenWidth) / 2}px`,
+            transform: `rotate(90deg)`,
+            transformOrigin: `center center`,
+            left: `${rotateLeftNum}px`,
+            top: `${rotateRightNum}px`,
         }"
     >
         <van-nav-bar
@@ -62,7 +66,7 @@
                     transformOrigin: 'center center',
                     // 保证 CSS 尺寸与内部 canvas 尺寸一致，避免坐标换算误差
                     width: `${screenWidth - 120}px`,
-                    height: `${screenHeight - 120}px`,
+                    height: `${screenHeight - 200}px`,
                     boxSizing: 'content-box',
                     borderRadius: '20px',
                     border: '2px dashed #ccc',
@@ -80,12 +84,7 @@
                 </div>
             </div>
         </div>
-        <!-- <van-signature
-            class="sign-canvas"
-            ref="signatureRef"
-            @submit="onSubmit"
-            @clear="onClear"
-        /> -->
+
         <!-- <h3>Vue & Vue3 Sign Canvas 电子签名板</h3> -->
 
         <!-- <div class="control">
@@ -204,6 +203,62 @@
             </ul>
         </div> -->
     </div>
+    <!-- 用于屏幕旋转时的样式 -->
+    <div v-else>
+        <van-nav-bar
+            title=""
+            left-text="申請人簽名(註:未成年請簽監護人姓名)"
+            right-text=""
+            left-arrow
+            @click-left="goBackTwo"
+        >
+            <template #right>
+                <div class="flex gap-2 items-center px-4">
+                    <van-button
+                        size="small"
+                        type="warning"
+                        plain
+                        @click="canvasClear"
+                    >
+                        重簽
+                    </van-button>
+                    <van-button
+                        size="small"
+                        type="primary"
+                        @click="saveAsImg"
+                    >
+                        確定
+                    </van-button>
+                </div>
+            </template>
+        </van-nav-bar>
+        <div class="sign-canvas-plus sign-canvas-plus2">
+            <SignCanvasPlus
+                class="sign-canvas"
+                ref="SignCanvasPlusRef"
+                :options="options"
+                v-model="data"
+                :style="{
+                    // 保证 CSS 尺寸与内部 canvas 尺寸一致，避免坐标换算误差
+                    width: `${screenWidth - 200}px`,
+                    height: `${screenHeight - 120}px`,
+                    boxSizing: 'content-box',
+                    borderRadius: '20px',
+                    border: '2px dashed #ccc',
+                    background: '#f9f9f9 !important',
+                }"
+            ></SignCanvasPlus>
+            <div
+                class="sign-overlay-text"
+                v-show="showOverlay"
+            >
+                <div class="overlay-inner">
+                    <div>請在此區域內簽名</div>
+                    <div>中文正楷簽名</div>
+                </div>
+            </div>
+        </div>
+    </div>
 </template>
 <script lang="ts" setup>
 import SignCanvasPlus, { IOptions } from "sign-canvas-plus";
@@ -218,11 +273,18 @@ const options = ref<IOptions>({});
 const metaViewportRef = ref<HTMLMetaElement | null>(null);
 // 横屏遮罩显隐
 const showOrientationMask = ref(false);
+const orientationSupported = ref(false);
+// 是否旋转
+const isRotate = ref(false);
 let orientationMql: MediaQueryList | null = null;
+let orientationChangeHandler: ((e: MediaQueryListEvent) => void) | null = null;
+let resizeHandler: (() => void) | null = null;
+let windowOrientationHandler: (() => void) | null = null;
 onMounted(() => {
     // 获取屏幕宽度和高度
     screenWidth.value = window.innerWidth;
     screenHeight.value = window.innerHeight;
+    isRotate.value = window.innerWidth > window.innerHeight;
     renderOptions();
     // 動態插入 viewport meta
     const existing = Array.from(
@@ -242,45 +304,93 @@ onMounted(() => {
         document.head.appendChild(meta);
         metaViewportRef.value = meta;
     }
-
-    // 初始化横屏检测
     const initOrientationWatch = () => {
         try {
+            orientationSupported.value =
+                "orientation" in screen && screen.orientation !== null;
             orientationMql = window.matchMedia("(orientation: landscape)");
             const apply = (matches: boolean) => {
                 showOrientationMask.value = matches;
+                isRotate.value = matches;
+                onOrientationUpdated();
+                rotateEventId.value++;
             };
             apply(orientationMql.matches);
-            // 监听变化（现代浏览器）
-            const handler = (e: MediaQueryListEvent) => apply(e.matches);
-            // @ts-ignore - Safari 14 及以下不支持 addEventListener
-            if (orientationMql.addEventListener) {
-                orientationMql.addEventListener("change", handler);
-            } else if (orientationMql.addListener) {
-                orientationMql.addListener(handler);
+            orientationChangeHandler = (e: MediaQueryListEvent) => {
+                apply(e.matches);
+                onOrientationUpdated();
+            };
+            // @ts-ignore
+            if (orientationMql.addListener) {
+                orientationMql.addListener(orientationChangeHandler);
+            } else if (orientationMql.addEventListener) {
+                orientationMql.addEventListener(
+                    "change",
+                    orientationChangeHandler
+                );
             }
 
             // 作为兜底，监听窗口尺寸变化
-            const resizeHandler = () => {
+            resizeHandler = () => {
                 const isLandscape = window.innerWidth > window.innerHeight;
                 showOrientationMask.value = isLandscape;
+                isRotate.value = isLandscape;
+                onOrientationUpdated();
+                rotateEventId.value++;
             };
             window.addEventListener("resize", resizeHandler, { passive: true });
-        } catch (err) {
-            // 最后兜底：通过宽高判断
-            showOrientationMask.value = window.innerWidth > window.innerHeight;
+            windowOrientationHandler = () => {
+                const isLandscape = window.innerWidth > window.innerHeight;
+                showOrientationMask.value = isLandscape;
+                isRotate.value = isLandscape;
+                onOrientationUpdated();
+                rotateEventId.value++;
+            };
             window.addEventListener(
-                "resize",
-                () => {
-                    showOrientationMask.value =
-                        window.innerWidth > window.innerHeight;
-                },
+                "orientationchange",
+                windowOrientationHandler,
                 { passive: true }
             );
+        } catch (err) {
+            const landscapeInit = window.innerWidth > window.innerHeight;
+            showOrientationMask.value = landscapeInit;
+            const fallbackResizeHandler = () => {
+                const landscape = window.innerWidth > window.innerHeight;
+                showOrientationMask.value = landscape;
+                isRotate.value = landscape;
+                onOrientationUpdated();
+                rotateEventId.value++;
+            };
         }
     };
     initOrientationWatch();
 });
+onMounted(() => {
+    // 获取屏幕宽度和高度
+    screenWidth.value = window.innerWidth;
+    screenHeight.value = window.innerHeight;
+    rotateLeftNum.value = (screenWidth.value - screenHeight.value) / 2;
+    rotateRightNum.value = (screenHeight.value - screenWidth.value) / 2;
+});
+const rotateRightNum: Ref<number> = ref(
+    (screenHeight.value - screenWidth.value) / 2
+);
+const rotateLeftNum: Ref<number> = ref(
+    (screenWidth.value - screenHeight.value) / 2
+);
+const pageContainerRef = ref<HTMLDivElement | null>(null);
+const rotateEventId = ref(0);
+watch(
+    [isRotate, rotateEventId],
+    () => {
+        if (isRotate.value) {
+            renderOptions2();
+        } else {
+            renderOptions();
+        }
+    },
+    { immediate: true }
+);
 const data = ref<string | null>(null);
 // 控制提示文字显隐：有签名内容隐藏，画板为空显示
 const showOverlay = ref(true);
@@ -290,19 +400,19 @@ watch(
         showOverlay.value = !(val && String(val).length > 0);
     }
 );
-const renderOptions = () => {
+function renderOptions() {
     options.value = reactive<IOptions>({
         isFullScreen: false, // 不使用全屏模式，使用自定义尺寸
         isFullCover: false, // 不覆盖所有元素
-        isDpr: true, // 启用高分屏兼容
+        isDpr: false, // 启用高分屏兼容
         lastWriteSpeed: 1, // 书写速度
         lastWriteWidth: 3, // 下笔宽度
         lineCap: "round", // 圆形线帽，更自然
         lineJoin: "round", // 圆角连接，更平滑
         canvasWidth: screenWidth.value - 120, // 还原为未旋转坐标系下的宽度
-        canvasHeight: screenHeight.value - 120, // 还原为未旋转坐标系下的高度
-        isShowBorder: true, // 显示边框便于定位
-        bgColor: "#f9f9f9", // 白色背景
+        canvasHeight: screenHeight.value - 200, // 还原为未旋转坐标系下的高度
+        isShowBorder: false, // 显示边框便于定位
+        bgColor: "transparent", // 白色背景
         borderWidth: false, // 边框宽度
         borderColor: "#e0e0e0", // 浅灰色边框
         writeWidth: 5, // 基础轨迹宽度
@@ -313,8 +423,43 @@ const renderOptions = () => {
         imgType: "png", //下载的图片格式  [String] 可选为 jpeg  canvas本是透明背景的.
         quality: 1, //  图片压缩系数[0-1]之间 可以选 默认为1
     });
+}
+function renderOptions2() {
+    options.value = reactive<IOptions>({
+        isFullScreen: false, // 不使用全屏模式，使用自定义尺寸
+        isFullCover: false, // 不覆盖所有元素
+        isDpr: false, // 启用高分屏兼容
+        lastWriteSpeed: 1, // 书写速度
+        lastWriteWidth: 3, // 下笔宽度
+        lineCap: "round", // 圆形线帽，更自然
+        lineJoin: "round", // 圆角连接，更平滑
+        canvasWidth: screenWidth.value - 200, // 还原为未旋转坐标系下的宽度
+        canvasHeight: screenHeight.value - 120, // 还原为未旋转坐标系下的高度
+        isShowBorder: false, // 显示边框便于定位
+        bgColor: "transparent", // 白色背景
+        borderWidth: false, // 边框宽度
+        borderColor: "#e0e0e0", // 浅灰色边框
+        writeWidth: 5, // 基础轨迹宽度
+        maxWriteWidth: 30, // 写字模式最大线宽  [Number] 可选
+        minWriteWidth: 5, // 写字模式最小线宽  [Number] 可选
+        writeColor: "#101010", // 轨迹颜色  [String] 可选
+        isSign: true, //签名模式 [Boolean] 默认为非签名模式,有线框, 当设置为true的时候没有任何线框
+        imgType: "png", //下载的图片格式  [String] 可选为 jpeg  canvas本是透明背景的.
+        quality: 1, //  图片压缩系数[0-1]之间 可以选 默认为1
+    });
+}
+const SignCanvasPlusRef = ref<any>(null);
+const onOrientationUpdated = async () => {
+    screenWidth.value = window.innerWidth;
+    screenHeight.value = window.innerHeight;
+    rotateLeftNum.value = (screenWidth.value - screenHeight.value) / 2;
+    rotateRightNum.value = (screenHeight.value - screenWidth.value) / 2;
+    if (isRotate.value) {
+        renderOptions2();
+    } else {
+        renderOptions();
+    }
 };
-const SignCanvasPlusRef = ref<InstanceType<typeof SignCanvasPlus | null>>(null);
 /**
  * 清除画板
  */
@@ -322,6 +467,60 @@ const canvasClear = () => {
     SignCanvasPlusRef.value.canvasClear();
     data.value = null; // 清除data变量
     showOverlay.value = true; // 重新显示提示
+};
+const trimTransparent = (src: string, padding = 16): Promise<string> => {
+    return new Promise((resolve) => {
+        const s = String(src).replace(/^\//, "");
+        const dataUrl = s.startsWith("data:")
+            ? s
+            : `data:image/png;base64,${s}`;
+        const image = new Image();
+        image.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = image.width;
+            canvas.height = image.height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return resolve(src);
+            ctx.drawImage(image, 0, 0);
+            const w = canvas.width;
+            const h = canvas.height;
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const pixels = imgData.data;
+            let minX = w - 1,
+                minY = h - 1,
+                maxX = 0,
+                maxY = 0,
+                found = false;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4 + 3;
+                    if (pixels[i] > 0) {
+                        found = true;
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (x > maxX) maxX = x;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+            if (!found) return resolve(src);
+            const pad = Math.max(0, Math.floor(padding));
+            const sx = Math.max(0, minX - pad);
+            const sy = Math.max(0, minY - pad);
+            const sw = Math.min(w - sx, maxX - minX + 1 + pad * 2);
+            const sh = Math.min(h - sy, maxY - minY + 1 + pad * 2);
+            const out = document.createElement("canvas");
+            out.width = sw;
+            out.height = sh;
+            const octx = out.getContext("2d");
+            if (!octx) return resolve(src);
+            octx.clearRect(0, 0, sw, sh);
+            octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+            resolve(out.toDataURL("image/png"));
+        };
+        image.onerror = () => resolve(src);
+        image.src = dataUrl;
+    });
 };
 /**
  * 保存图片
@@ -334,24 +533,44 @@ const saveAsImg = async () => {
         });
     }
     let img = SignCanvasPlusRef.value.saveAsImg();
-    // 保存到本地存储
+    if (!isRotate.value && img) {
+        try {
+            const rotated = await new Promise<string>((resolve) => {
+                const s = String(img).replace(/^\//, "");
+                const src = s.startsWith("data:")
+                    ? s
+                    : `data:image/png;base64,${s}`;
+                const image = new Image();
+                image.onload = () => {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = image.height;
+                    canvas.height = image.width;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) return resolve(img);
+                    ctx.translate(0, canvas.height);
+                    ctx.rotate(-Math.PI / 2);
+                    ctx.drawImage(image, 0, 0);
+                    resolve(canvas.toDataURL("image/png"));
+                };
+                image.onerror = () => resolve(img);
+                image.src = src;
+            });
+            img = rotated;
+        } catch {}
+    }
     try {
-        // 清除之前保存的签名数据
+        img = await trimTransparent(img, 24);
+    } catch {}
+    try {
         const existingSignatures = JSON.parse(
             localStorage.getItem("signature_list") || "[]"
         );
-        // 删除之前的签名图片数据
         existingSignatures.forEach((item) => {
             localStorage.removeItem(item.key);
         });
-        // 使用固定的存储键名，只保存一个签名
         const timestamp = new Date().getTime();
         const storageKey = "current_signature";
-
-        // 保存新的签名到localStorage
         localStorage.setItem(storageKey, img);
-
-        // 只保存当前这一个签名的信息
         const currentSignature = [
             {
                 key: storageKey,
@@ -369,71 +588,6 @@ const saveAsImg = async () => {
         alert("保存失败，可能是存储空间不足");
     }
 };
-
-/**
- * 查看当前保存的签名
- */
-const viewSavedSignatures = () => {
-    try {
-        const signatureList = JSON.parse(
-            localStorage.getItem("signature_list") || "[]"
-        );
-
-        if (signatureList.length === 0) {
-            alert("暂无已保存的签名");
-            return;
-        }
-
-        const currentSignature = signatureList[0]; // 只有一个签名
-        const imageData = localStorage.getItem(currentSignature.key);
-
-        if (!imageData) {
-            alert("签名数据已损坏");
-            return;
-        }
-
-        // 显示签名信息
-        const message = `当前保存的签名：\n保存时间: ${currentSignature.date}\n\n点击确定查看签名图片`;
-
-        if (confirm(message)) {
-            // 在新窗口显示签名图片
-            const newWindow = window.open("", "_blank");
-            if (newWindow) {
-                newWindow.document.write(`
-                    <html>
-                        <head><title>当前签名预览</title></head>
-                        <body style="margin:0;padding:20px;text-align:center;">
-                            <h3>当前签名 (${currentSignature.date})</h3>
-                            <img src="${imageData}" style="max-width:100%;border:1px solid #ccc;" />
-                        </body>
-                    </html>
-                `);
-            }
-        }
-    } catch (error) {
-        console.error("查看签名失败:", error);
-        alert("查看失败，请检查本地存储");
-    }
-};
-
-/**
- * 下载dealImage图片
- */
-const dealImage = () => {
-    SignCanvasPlusRef.value.dealImage();
-};
-const image = ref("");
-const onSubmit = (data: { image: string }) => {
-    image.value = data.image;
-};
-const onClear = () => showToast("clear");
-const signatureRef = ref<any>(null);
-const handleClear = () => signatureRef.value?.clear?.();
-const handleConfirm = () => {
-    signatureRef.value?.confirm?.();
-    navigateTo("/");
-};
-
 onUnmounted(() => {
     if (metaViewportRef.value && metaViewportRef.value.parentNode) {
         metaViewportRef.value.parentNode.removeChild(metaViewportRef.value);
@@ -442,9 +596,27 @@ onUnmounted(() => {
     // 清理监听
     try {
         if (orientationMql) {
-            // 无法移除匿名 handler，这里依赖页面销毁
+            if (orientationChangeHandler) {
+                // @ts-ignore
+                if (orientationMql.removeListener) {
+                    orientationMql.removeListener(orientationChangeHandler);
+                } else if (orientationMql.removeEventListener) {
+                    orientationMql.removeEventListener(
+                        "change",
+                        orientationChangeHandler
+                    );
+                }
+            }
         }
-        window.removeEventListener("resize", () => {});
+        if (resizeHandler) {
+            window.removeEventListener("resize", resizeHandler);
+        }
+        if (windowOrientationHandler) {
+            window.removeEventListener(
+                "orientationchange",
+                windowOrientationHandler
+            );
+        }
     } catch {}
 });
 </script>
@@ -462,7 +634,6 @@ onUnmounted(() => {
 
 ul {
     text-align: left;
-
     li {
         list-style: none;
         padding: 4px 10px;
@@ -523,12 +694,19 @@ ul {
     position: relative; /* 允许覆盖文字绝对定位 */
 }
 
+.sign-canvas-plus2 {
+    height: calc(100% - 40px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* 横屏时的特殊样式 */
 @media (orientation: landscape) {
     .sign-canvas-plus {
         margin: 2px;
         padding: 0;
-        height: calc(100% - 40px);
+        height: calc(99vh - var(--van-nav-bar-height));
     }
 }
 
@@ -547,6 +725,13 @@ ul {
     color: #8a8a8a;
     font-size: 16px;
     line-height: 1.6;
+}
+/* 字体在不同屏幕下自适应（覆盖默认字号） */
+.overlay-inner {
+    font-size: clamp(14px, 2.2vw, 18px);
+}
+.tip-text {
+    font-size: clamp(13px, 2.5vw, 16px);
 }
 /* 禁用浏览器默认触控手势，确保触控坐标与绘制一致 */
 .sign-canvas {

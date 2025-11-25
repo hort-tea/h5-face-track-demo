@@ -3,8 +3,9 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
-    "generate": "nuxt generate",
+    "dev": "cross-env NUXT_APP_BASE_URL='/faces_test/' nuxt dev",
+    "generate": "cross-env NUXT_APP_BASE_URL='/faces/' nuxt generate",
+    "generate_test": "cross-env NUXT_APP_BASE_URL='/faces_test/' nuxt generate",
     "preview": "nuxt preview",
     "start": "node --input-type=module -e \"process.env.NITRO_HOST='0.0.0.0'; process.env.NITRO_PORT='80'; import('./.output/server/index.mjs')\"",
     "postinstall": "nuxt prepare"
@@ -15,6 +16,7 @@
     "@types/node": "^18.16.19",
     "@types/tracking": "^1.1.30",
     "@vant/nuxt": "^1.0.2",
+    "cross-env": "^10.1.0",
     "nuxt": "^3.19.2"
   },
   "dependencies": {

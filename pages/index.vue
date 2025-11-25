@@ -1,5 +1,8 @@
 <template>
-    <div class="font-sans">
+    <div
+        class="font-sans"
+        v-if="!showLoading"
+    >
         <div class="bg-blue-500 text-white text-center py-4 text-lg font-bold">
             台胞證申請制證相片上傳平台
         </div>
@@ -187,11 +190,112 @@
             </div>
         </van-dialog>
     </div>
+    <FullScreenLoading
+        :visible="showLoading"
+        message="驗證中..."
+    />
 </template>
 
 <script setup>
+import { check_token } from "@/services/face";
 const showPolicy = ref(false);
 const showPhotoRule = ref(false);
+const route = useRoute();
+const router = useRouter();
+const query = route.query;
+const { t: token, e: time } = query;
+const currentTime = Date.now();
+const showLoading = ref(true);
+if (!token || !time) {
+    //验证token和time是否存在 不存在则跳转到状态页面提示 无法访问鉴权失败
+    router.replace({
+        path: "auth",
+        query: {
+            type: "auth",
+        },
+    });
+}
+// 為真的得判斷一下參數是否異常
+if (token || time) {
+    const hasSymbol = /[^A-Za-z0-9_-]/.test(token);
+    const timeIsNumber = /^\d+$/.test(time);
+    if (
+        hasSymbol ||
+        !timeIsNumber ||
+        token.length !== 46 ||
+        time.length !== 10
+    ) {
+        router.replace({
+            path: "auth",
+            query: {
+                type: "auth",
+            },
+        });
+    }
+}
+// 验证时间是否过期
+const isExpired = currentTime > Number(time) * 1000;
+console.log(currentTime, time * 1000, isExpired);
+if (isExpired) {
+    router.replace({
+        path: "auth",
+        query: {
+            type: "timeout",
+        },
+    });
+}
+
+if (
+    token &&
+    time &&
+    !/[^A-Za-z0-9_-]/.test(token) &&
+    /^\d+$/.test(time) &&
+    token.length === 46 &&
+    time.length === 10 &&
+    !isExpired
+) {
+    check_token({ token })
+        .then((res) => {
+            localStorage.setItem("token", res.result.token);
+            localStorage.setItem("btoken", res.result.btoken);
+            localStorage.setItem("pageType", res.result.type);
+            localStorage.setItem("identity", res.result.identity);
+            let baidu = undefined;
+            let callbackUrl = undefined;
+            let localtionHref =
+                "https://" +
+                window.location.hostname +
+                window.location.pathname;
+            baidu =
+                "https://brain.baidu.com/face/print/detection?token=" +
+                res.result.btoken;
+            callbackUrl =
+                localtionHref +
+                "face_similarity/bdface_cb.php?" +
+                "bt=" +
+                res.result.btoken +
+                "&tk=" +
+                res.result.token;
+            localStorage.setItem("localtionHref", localtionHref);
+            localStorage.setItem("baidu", baidu);
+            localStorage.setItem("callbackUrl", callbackUrl);
+            showLoading.value = false;
+        })
+        .catch((err) => {
+            console.log(err, "err");
+            showToast(err.details.msg || "驗證失敗");
+            setTimeout(() => {
+                router.replace({
+                    path: "auth",
+                    query: {
+                        type: "auth",
+                    },
+                });
+                showLoading.value = false;
+            }, 1500);
+        })
+        .finally(() => {});
+}
 </script>
 <style scoped>
 :deep(.van-dialog__content) {

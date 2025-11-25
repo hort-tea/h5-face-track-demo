@@ -16,18 +16,21 @@ export interface ApiResponse<T = any> {
 
 export interface ApiError {
     status: number;
+    statusText?: string;
     code?: string | number;
     message: string;
     details?: any;
 }
 // 默认使用 Nuxt 开发代理：开发环境走 "/api"，其他环境走真实后端
-
 // 创建 Axios 实例
+let BASE_URL = "/faces";
 const http: AxiosInstance = axios.create({
-    // baseURL: "http://10.0.10.80",
-    baseURL: "https://10.0.10.80/faces",
-    // baseURL: "http://192.168.100.246",
-    timeout: 15000000,
+    // baseURL: "https://10.0.10.80/faces",
+    baseURL: "/faces",
+    // baseURL: "http://192.168.100.246/faces",
+    // baseURL: "https://vfy.tbkservice.cn/faces",
+    //baseURL: "https://check1.cheertravel.com.hk/faces_test",
+    timeout: 60000,
     headers: {
         Accept: "application/json",
     },
@@ -69,19 +72,27 @@ http.interceptors.response.use(
         return payload as any;
     },
     (error: AxiosError) => {
+        // 取得瀏覽器 Network 面板中的 Status Code（數字與文字）
+        const status = error.response?.status ?? 0;
+        const statusText = error.response?.statusText ?? "";
+        const method = (error.config?.method || "").toUpperCase();
+        const url = error.config?.url || "";
+        const code = error.code; // 例如 ERR_NETWORK、ECONNABORTED
+        console.log(
+            `[HTTP ERROR] ${method} ${url} -> status=${status} ${statusText}, code=${String(
+                code
+            )}`
+        );
         const apiError: ApiError = {
             status: error.response?.status || 0,
+            statusText,
             code: (error.response?.data as any)?.code,
-            message:
-                (error.response?.data as any)?.message ||
-                error.message ||
-                "Network Error",
+            message: error.msg || "Network Error",
             details: error.response?.data,
         };
         return Promise.reject(apiError);
     }
 );
-
 // 常用方法封装（保持类型友好）
 export async function get<T = any>(
     url: string,

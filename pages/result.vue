@@ -8,13 +8,38 @@
     <div class="p-4 bg-gray-50">
         <div class="container mx-auto bg-white">
             <div class="box-border px-6">
-                <div class="w-3/5 mx-auto pt-12">
-                    <van-image
-                        :src="croppedImageUrlState"
-                        @click="previewFace(croppedImageUrlState)"
-                    />
+                <div class="w-full mx-auto pt-6">
+                    <div class="flex justify-between w-full gap-4">
+                        <div
+                            class="flex-1"
+                            v-if="pageType != 3"
+                        >
+                            <h4 class="m-0 mb-1 text-center">上傳照片</h4>
+                            <van-image
+                                :src="croppedImageUrlState"
+                                height="212"
+                                fit="cover"
+                                @click="previewFace(croppedImageUrlState)"
+                            />
+                        </div>
+                        <div
+                            class="flex-1"
+                            :class="{ 'text-center': pageType == 3 }"
+                        >
+                            <h4 class="m-0 mb-1 text-center">現場照</h4>
+                            <!-- width="100"
+                        height="134"
+                        fit="cover" -->
+                            <van-image
+                                :src="xcpic"
+                                height="212"
+                                fit="cover"
+                                @click="previewFace(xcpic)"
+                            />
+                        </div>
+                    </div>
                     <div
-                        v-if="!result"
+                        v-if="!result && loading"
                         class="text-center py-8"
                     >
                         <van-loading
@@ -31,7 +56,7 @@
                     </div>
                     <div
                         v-else
-                        class="flex justify-center"
+                        class="flex justify-center mt-4"
                     >
                         <van-tag
                             class="mt-4 p-[13px] font-[lg] font-bold"
@@ -58,6 +83,10 @@
                             不合格
                         </van-tag>
                     </div>
+                    <!-- 比對值 保留兩位小數 V3接口改造 -->
+                    <!-- <div class="w-full text-center mt-4">
+                        比對值：{{ result?.percentage?.toFixed(2) }}%
+                    </div> -->
                 </div>
                 <template v-if="result">
                     <div
@@ -96,7 +125,13 @@
                         </span>
                     </div>
                 </template>
-
+                <!-- 在這裡顯示錯誤消息 -->
+                <div
+                    v-if="errorMessage"
+                    class="w-3/5 mx-auto mt-6 text-center"
+                >
+                    <span class="text-red-500">{{ errorMessage }}</span>
+                </div>
                 <!-- <van-empty>
                     <div
                         class="flex flex-col items-center space-y-2 justify-center"
@@ -118,29 +153,57 @@
                         </div>
                     </template>
                 </van-empty> -->
-                <div
-                    class="mt-6"
-                    v-if="result?.percentage >= 60"
-                >
-                    <van-button
-                        type="primary"
-                        block
-                        @click="navigateTo('/signature')"
+                <!-- 不合格操作 -->
+                <div>
+                    <div
+                        v-if="result?.percentage < 60"
+                        class="mt-6"
                     >
-                        下一步簽名
-                    </van-button>
-                </div>
-                <div
-                    class="mt-6"
-                    v-else
-                >
-                    <van-button
-                        type="primary"
-                        block
-                        @click="navigateTo('/upload', { replace: true })"
+                        <van-button
+                            type="danger"
+                            block
+                            @click="resetBaduUrl"
+                        >
+                            重新驗證
+                        </van-button>
+                        <div
+                            class="mt-2"
+                            v-if="pageType != 3"
+                        >
+                            <van-button
+                                type="success"
+                                block
+                                @click="resetBaduUrl(0)"
+                            >
+                                重新上傳相片
+                            </van-button>
+                        </div>
+                    </div>
+                    <div
+                        class="mt-2"
+                        v-else
                     >
-                        重新上傳相片
-                    </van-button>
+                        <van-button
+                            v-if="result"
+                            type="success"
+                            block
+                            @click="resetBaduUrl(0)"
+                        >
+                            重新上傳相片
+                        </van-button>
+                    </div>
+                    <div
+                        class="mt-2"
+                        v-if="result?.percentage"
+                    >
+                        <van-button
+                            type="primary"
+                            block
+                            @click="navigateTo('/signature', { replace: true })"
+                        >
+                            下一步簽名
+                        </van-button>
+                    </div>
                 </div>
 
                 <!-- <div
@@ -162,52 +225,166 @@
     </div>
 </template>
 <script lang="ts" setup>
-import { faceSimilarityByBase64 } from "@/services/face";
-
-// 人臉數據
+import { faceVerifyStep2 } from "@/services/face";
+import { getImage } from "@/composables/idb";
+import { check_token } from "@/services/face";
 const faceList = useState<string[]>("face-list", () => []);
-// 提交的數據
-const croppedImageUrlState = useState<string>(
-    "useStateCroppedImageUrl",
-    () => ""
-);
-
-// 預覽圖片
-const previewFace = (croppedImageUrlState: string) => {
-    showImagePreview([croppedImageUrlState]);
+const croppedImageUrlState = ref("");
+const previewFace = (s: string) => {
+    showImagePreview([s]);
 };
 const loading = ref(false);
 const result = ref(null);
+const errorMessage = ref("");
+const errorStatusDisplay = ref("");
+const xcpic = ref(undefined);
+const upPic = ref(undefined);
+const pageType = ref(localStorage.getItem("pageType") || "");
 // 請求接口
-onBeforeMount(() => {
-    confirmSignature();
+const route = useRoute();
+const params = JSON.parse(decodeURIComponent(route.query.data));
+result.value = params;
+if (result.value?.code == 0) {
+    errorStatusDisplay.value = "验证失败" || result.value.msg;
+    errorMessage.value = "檢測失敗，請重試!" || result.value.msg;
+    showToast("验证失败");
+    navigateTo("/upload", { replace: true });
+} else {
+    xcpic.value = params.result?.xcpic_path_bd || "";
+    upPic.value = params.result?.photo_path || "";
+    result.value = JSON.parse(params.result.similarity.response);
+    localStorage.setItem("xcpic_path", params.result?.xcpic_path);
+    localStorage.setItem("photo_path", params.result?.photo_path);
+}
+console.log(params.result);
+console.log(result.value);
+onMounted(() => {
+    const key = localStorage.getItem("croppedImageKey") || "";
+    if (key) {
+        getImage(key)
+            .then((blob) => {
+                if (blob) {
+                    croppedImageUrlState.value = URL.createObjectURL(blob);
+                } else {
+                    const b64 = localStorage.getItem("croppedImageUrl") || "";
+                    croppedImageUrlState.value = b64;
+                }
+            })
+            .catch(() => {
+                const b64 = localStorage.getItem("croppedImageUrl") || "";
+                croppedImageUrlState.value = b64;
+            });
+    } else {
+        const b64 = localStorage.getItem("croppedImageUrl") || "";
+        croppedImageUrlState.value = b64;
+    }
 });
 const confirmSignature = async () => {
     loading.value = true;
-    const img1 = await toPureBase64Async(croppedImageUrlState.value);
-    const img2 = await toPureBase64Async(faceList.value[0]);
-    if (!img2) {
-        alert("请先获取人脸");
+    const idcard = useState("useStateIdNumber", () => "");
+    if (!faceList.value.length) {
+        const savedFaceList = localStorage.getItem("face-list");
+        try {
+            faceList.value = savedFaceList ? JSON.parse(savedFaceList) : [];
+        } catch (e) {
+            faceList.value = [];
+        }
+    }
+    if (!faceList.value.length) {
+        showToast("请先获取人脸");
         loading.value = false;
         return;
     }
-    if (!img1) {
-        alert("请先裁切并获取图片");
+    const dataUrl = faceList.value[2];
+    let blob: Blob | null = null;
+    try {
+        blob = await (await fetch(dataUrl)).blob();
+    } catch (e) {
+        blob = null;
+    }
+    if (!blob) {
+        showToast("人脸图片无效");
         loading.value = false;
         return;
     }
-    faceSimilarityByBase64({ image1: img1, image2: img2 })
+    let file: File | Blob = blob;
+    try {
+        file = new File([blob], "xcpic.jpg", { type: "image/jpeg" });
+    } catch (e) {
+        showToast("人脸图片转换失败");
+        loading.value = false;
+        return;
+    }
+    let photoPath = "";
+    try {
+        const s = localStorage.getItem("step1");
+        const obj = s ? JSON.parse(s) : null;
+        photoPath = obj?.photo_path || obj?.path || "";
+    } catch (e) {
+        photoPath = "";
+    }
+    if (!photoPath && localStorage.getItem("pageType") != 3) {
+        showToast("缺少 step1 的 photo_path");
+        loading.value = false;
+        return;
+    }
+    const log_data = localStorage.getItem("step1Log");
+    faceVerifyStep2(file, idcard.value, photoPath, log_data)
         .then((res) => {
             loading.value = false;
-            // 若返回為空，提示失敗並返回重新上傳
-            if (!res) {
-                showToast("請重新上傳相片");
+            switch (res.code) {
+                case 0:
+                    errorStatusDisplay.value = "";
+                    errorMessage.value = "檢測失敗，請重試!";
+                    console.log(errorMessage.value, "errorMessage.value");
+                    showToast(errorMessage.value);
+                    // navigateTo("/upload", { replace: true });
+                    break;
+                case 200:
+                    result.value = res.result.similarity;
+                    try {
+                        const payload =
+                            (res && res.result && res.result.data) ||
+                            res.result ||
+                            null;
+                        if (payload) {
+                            localStorage.setItem(
+                                "step2",
+                                JSON.stringify(payload)
+                            );
+                        }
+                    } catch (e) {}
+                    break;
+                default:
+                    errorStatusDisplay.value = "檢測失敗，請重試";
+                    errorMessage.value = `檢測失敗，請重試`;
+                    showToast(errorMessage.value);
+                    navigateTo("/upload", { replace: true });
+                    break;
+            }
+        })
+        .catch((err) => {
+            loading.value = false;
+            // 处理错误，例如显示错误信息
+            if (err.message === "timeout of 100ms exceeded") {
+                errorMessage.value = "請求超時，請重試";
+                showToast(errorMessage.value);
+                navigateTo("/upload", { replace: true });
+                return;
+            } else {
+                errorStatusDisplay.value = "檢測失敗，請重試";
+                errorMessage.value = "檢測失敗，請重試";
+                showToast(errorMessage.value);
+                navigateTo("/upload", { replace: true });
                 return;
             }
-            result.value = res;
         })
-        .catch(() => {
-            loading.value = false;
+        .finally(() => {
+            // 檢測完成後清空本地存儲與內存中的 face-list
+            try {
+                //localStorage.removeItem("face-list");
+                // faceList.value = [];
+            } catch (e) {}
         });
 };
 /**
@@ -216,11 +393,45 @@ const confirmSignature = async () => {
  */
 const toPureBase64Async = async (data?: string | null): Promise<string> => {
     if (!data) return "";
-    // 已是 dataURL：直接截取逗号后的部分
-    if (data.startsWith("data:")) {
-        const commaIndex = data.indexOf(",");
-        const pure = commaIndex !== -1 ? data.slice(commaIndex + 1) : data;
-        return pure;
+    // 已是 dataURL：用 canvas 统一转为 JPEG，并返回纯 base64
+    if (/^data:image\//i.test(data)) {
+        try {
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement("canvas");
+                        const width = img.naturalWidth || img.width;
+                        const height = img.naturalHeight || img.height;
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext("2d");
+                        if (!ctx) {
+                            reject(new Error("Canvas 2D context unavailable"));
+                            return;
+                        }
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const jpegDataUrl = canvas.toDataURL(
+                            "image/jpeg",
+                            0.92
+                        );
+                        console.log(jpegDataUrl, "jpegDataUrl");
+                        resolve(jpegDataUrl.split(",")[1]);
+                    } catch (err) {
+                        reject(err as Error);
+                    }
+                };
+                img.onerror = () =>
+                    reject(
+                        new Error("Failed to load dataURL for JPEG conversion")
+                    );
+                img.src = data;
+            });
+            return base64;
+        } catch (e) {
+            console.error("dataURL 转 JPEG base64 失败:", e);
+            return "";
+        }
     }
     // 是 URL 或 blob
     if (
@@ -231,15 +442,45 @@ const toPureBase64Async = async (data?: string | null): Promise<string> => {
         try {
             const res = await fetch(data);
             const blob = await res.blob();
+            // 使用 canvas 将图片转为 JPG 格式的 base64 DataURL
+            const objectUrl = URL.createObjectURL(blob);
             const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const result = reader.result as string;
-                    resolve(result.split(",")[1]?.replace(/^\//, "") || "");
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement("canvas");
+                        const width = img.naturalWidth || img.width;
+                        const height = img.naturalHeight || img.height;
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext("2d");
+                        if (!ctx) {
+                            URL.revokeObjectURL(objectUrl);
+                            reject(new Error("Canvas 2D context unavailable"));
+                            return;
+                        }
+                        ctx.drawImage(img, 0, 0, width, height);
+                        // 质量 0.92 可按需调整（0-1）
+                        const jpegDataUrl = canvas.toDataURL(
+                            "image/jpeg",
+                            0.92
+                        );
+                        URL.revokeObjectURL(objectUrl);
+                        resolve(jpegDataUrl.split(",")[1]);
+                    } catch (err) {
+                        URL.revokeObjectURL(objectUrl);
+                        reject(err as Error);
+                    }
                 };
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
+                img.onerror = () => {
+                    URL.revokeObjectURL(objectUrl);
+                    reject(
+                        new Error("Failed to load image for JPEG conversion")
+                    );
+                };
+                img.src = objectUrl;
             });
+            // 返回纯 base64（无 dataURL 前缀）
             return base64;
         } catch (e) {
             console.error("图片转 base64 失败:", e);
@@ -248,6 +489,77 @@ const toPureBase64Async = async (data?: string | null): Promise<string> => {
     }
     // 其他情况：视为已是 base64，去掉可能的起始 '/'
     return data.replace(/^\//, "");
+};
+const resetBaduUrl = (type: number) => {
+    showLoadingToast({
+        message: "加載中...",
+        forbidClick: true,
+        duration: 0,
+    });
+    const token = localStorage.getItem("token");
+    check_token({ token })
+        .then((res) => {
+            localStorage.setItem("token", res.result.token);
+            localStorage.setItem("btoken", res.result.btoken);
+            localStorage.setItem("pageType", res.result.type);
+            localStorage.setItem("identity", res.result.identity);
+            const localtionHref = localStorage.getItem("localtionHref");
+            let baidu = undefined;
+            let callbackUrl = undefined;
+
+            baidu =
+                "https://brain.baidu.com/face/print/detection?token=" +
+                res.result.btoken;
+            callbackUrl =
+                localtionHref +
+                "face_similarity/bdface_cb.php?" +
+                "bt=" +
+                res.result.btoken +
+                "&tk=" +
+                res.result.token;
+            localStorage.setItem("baidu", baidu);
+            localStorage.setItem("callbackUrl", callbackUrl);
+            if (type == 0) {
+                navigateTo("/upload", { replace: true });
+            } else {
+                if (localStorage.getItem("pageType") == 3) {
+                    const baidu = localStorage.getItem("baidu");
+                    const callbackUrl = localStorage.getItem("callbackUrl");
+                    //跳轉到百度
+                    window.location.href =
+                        baidu +
+                        "&callbackUrl=" +
+                        encodeURIComponent(callbackUrl);
+                } else {
+                    const baidu = localStorage.getItem("baidu");
+                    const step1 = localStorage.getItem("step1");
+                    const step1Log = localStorage.getItem("step1Log");
+                    let callbackUrl = localStorage.getItem("callbackUrl");
+                    callbackUrl = `${callbackUrl}&ppath=${
+                        JSON.parse(step1)?.path || ""
+                    }&l=${encodeURIComponent(step1Log)}`;
+                    window.location.href =
+                        baidu +
+                        "&callbackUrl=" +
+                        encodeURIComponent(callbackUrl);
+                }
+            }
+        })
+        .catch((err) => {
+            showToast(err.details.msg || "驗證失敗");
+            setTimeout(() => {
+                router.replace({
+                    path: "auth",
+                    query: {
+                        type: "auth",
+                    },
+                });
+                showLoading.value = false;
+            }, 1500);
+        })
+        .finally(() => {
+            closeToast();
+        });
 };
 </script>
 <style scoped>
