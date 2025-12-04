@@ -1,43 +1,19 @@
 <template>
-    <van-nav-bar
-        title="簽名確認"
-        left-text="返回"
-        left-arrow
-        @click-left="navigateTo('/signature')"
-    ></van-nav-bar>
+    <van-nav-bar title="簽名確認" left-text="返回" left-arrow @click-left="navigateTo('/signature')"></van-nav-bar>
     <div class="px-4 mt-3 bg-gray-50">
         <div class="bg-white p-4">
             <PhotoStep :active="3" />
-            <div
-                class="flex items-center justify-center mb-3 gap-3"
-                v-if="pageType != 3"
-            >
+            <div class="flex items-center justify-center mb-3 gap-3" v-if="pageType != '3'">
                 <!--  :src="croppedImageUrl" -->
                 <div class="flex-1 max-w-[60%]">
-                    <van-image
-                        class="border border-gray-300"
-                        height="auto"
-                        width="100%"
-                        fit="contain"
-                        :src="croppedImageUrlState"
-                        @click="previewCroppedImage(croppedImageUrlState)"
-                    />
+                    <van-image class="border border-gray-300" height="auto" width="100%" fit="contain" :src="croppedImageUrlState" @click="previewCroppedImage(croppedImageUrlState)" />
                 </div>
             </div>
             <!-- 台灣身份證號顯示 -->
-            <div class="p-4 flex-1 text-center text-sm font-medium">
-                台灣身份證號：{{ idcard }}
-            </div>
-            <div class="text-center text-lg font-medium">
-                請您再次確認無誤後，本相片將上傳至平台
-                並做為您後續申請台胞證的制證相片使用
-                如有任何疑問，請洽本公司服務櫃台洽詢。
-            </div>
+            <div class="p-4 flex-1 text-center text-sm font-medium">台灣身份證號：{{ idcard }}</div>
+            <div class="text-center text-lg font-medium">請您再次確認無誤後，本相片將上傳至平台 並做為您後續申請台胞證的制證相片使用 如有任何疑問，請洽本公司服務櫃台洽詢。</div>
             <!-- 当前签名显示 -->
-            <div
-                v-if="currentSignature"
-                class="border border-gray-200 rounded-lg p-4"
-            >
+            <div v-if="currentSignature" class="border border-gray-200 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-3">
                     <span class="text-sm font-medium">簽名時間</span>
                     <span class="text-xs text-gray-500">
@@ -47,47 +23,20 @@
                 <div class="flex items-center justify-center">
                     <div class="relative w-[60%] h-[110px]">
                         <div class="w-full h-full">
-                            <van-image
-                                class="w-full h-full border border-gray-300 rounded"
-                                fit="contain"
-                                :src="currentSignature.imageData"
-                            />
+                            <van-image class="w-full h-full border border-gray-300 rounded" fit="contain" :src="currentSignature.imageData" />
                         </div>
                     </div>
                 </div>
             </div>
             <!-- 无签名提示 -->
-            <div
-                v-else
-                class="text-center py-8"
-            >
+            <div v-else class="text-center py-8">
                 <p class="text-gray-500 mb-4">暂无保存的簽名</p>
-                <van-button
-                    type="primary"
-                    @click="navigateTo('/signature')"
-                >
-                    去簽名
-                </van-button>
+                <van-button type="primary" @click="navigateTo('/signature')">去簽名</van-button>
             </div>
             <!-- 操作按钮 -->
-            <div
-                v-if="currentSignature"
-                class="mt-6 space-y-3"
-            >
-                <van-button
-                    type="primary"
-                    block
-                    @click="confirmSignature"
-                    loading-text="提交中..."
-                >
-                    確認提交
-                </van-button>
-                <van-button
-                    block
-                    @click="navigateTo('/signature')"
-                >
-                    重新簽名
-                </van-button>
+            <div v-if="currentSignature" class="mt-6 space-y-3">
+                <van-button type="primary" block @click="confirmSignature" loading-text="提交中...">確認提交</van-button>
+                <van-button block @click="navigateTo('/signature')">重新簽名</van-button>
             </div>
         </div>
     </div>
@@ -135,9 +84,7 @@ const dataUrlToBlob = (s: string): Blob | null => {
  */
 const loadCurrentSignature = () => {
     try {
-        const storedList = JSON.parse(
-            localStorage.getItem("signature_list") || "[]"
-        );
+        const storedList = JSON.parse(localStorage.getItem("signature_list") || "[]");
         if (storedList.length > 0) {
             const signatureInfo = storedList[0]; // 只有一个签名
             const imageData = localStorage.getItem(signatureInfo.key);
@@ -196,9 +143,9 @@ const confirmSignature = async () => {
         cancelButtonText: "取消",
     })
         .then(async () => {
+            console.log("确认提交");
             try {
-                let signDataUrl =
-                    localStorage.getItem("current_signature") || "";
+                let signDataUrl = localStorage.getItem("current_signature") || "";
                 if (!signDataUrl && currentSignature.value?.imageData) {
                     signDataUrl = String(currentSignature.value.imageData);
                 }
@@ -230,22 +177,14 @@ const confirmSignature = async () => {
                 }
                 let photoPath = localStorage.getItem("photo_path") || "";
                 let xcpicPath = localStorage.getItem("xcpic_path") || "";
-                let faceScore = 0;
-                if (
-                    (!photoPath && localStorage.getItem("pageType") != 3) ||
-                    !xcpicPath
-                ) {
+                const step2 = localStorage.getItem("step2");
+                let faceScore = JSON.parse(step2)?.face_match_score.toFixed(2) || 0;
+                if ((!photoPath && localStorage.getItem("pageType") != 3) || !xcpicPath) {
                     showToast("缺少上一步的 path");
                     return;
                 }
                 console.log(signFile, idcard, faceScore, photoPath, xcpicPath);
-                const res = await faceVerifyStep3(
-                    signFile,
-                    idcard,
-                    faceScore,
-                    photoPath,
-                    xcpicPath
-                );
+                const res = await faceVerifyStep3(signFile, idcard, faceScore, photoPath, xcpicPath);
                 console.log(res.code, "提交結果");
                 switch (res.code) {
                     case 200:

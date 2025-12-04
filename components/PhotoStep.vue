@@ -1,7 +1,8 @@
 <template>
     <div class="user-card">
         <van-steps :active="active">
-            <van-step>{{ pageType == 3 ? "信息驗證" : "照片上傳" }}</van-step>
+            <van-step>證件號</van-step>
+            <van-step v-if="pageType != 3">照片上傳</van-step>
             <van-step>人臉核驗</van-step>
             <van-step>簽名</van-step>
             <van-step>確認提交</van-step>

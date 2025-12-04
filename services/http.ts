@@ -1,10 +1,5 @@
 import axios from "axios";
-import type {
-    AxiosError,
-    AxiosInstance,
-    AxiosRequestConfig,
-    AxiosResponse,
-} from "axios";
+import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
 // 统一的返回类型（可根据后端约定调整）
 export interface ApiResponse<T = any> {
@@ -26,10 +21,10 @@ export interface ApiError {
 let BASE_URL = "/faces";
 const http: AxiosInstance = axios.create({
     // baseURL: "https://10.0.10.80/faces",
-    baseURL: "/faces",
+    baseURL: "/faces_test",
     // baseURL: "http://192.168.100.246/faces",
     // baseURL: "https://vfy.tbkservice.cn/faces",
-    //baseURL: "https://check1.cheertravel.com.hk/faces_test",
+    // baseURL: "https://check1.cheertravel.com.hk/faces_test",
     timeout: 60000,
     headers: {
         Accept: "application/json",
@@ -78,11 +73,7 @@ http.interceptors.response.use(
         const method = (error.config?.method || "").toUpperCase();
         const url = error.config?.url || "";
         const code = error.code; // 例如 ERR_NETWORK、ECONNABORTED
-        console.log(
-            `[HTTP ERROR] ${method} ${url} -> status=${status} ${statusText}, code=${String(
-                code
-            )}`
-        );
+        console.log(`[HTTP ERROR] ${method} ${url} -> status=${status} ${statusText}, code=${String(code)}`);
         const apiError: ApiError = {
             status: error.response?.status || 0,
             statusText,
@@ -94,35 +85,19 @@ http.interceptors.response.use(
     }
 );
 // 常用方法封装（保持类型友好）
-export async function get<T = any>(
-    url: string,
-    params?: any,
-    config?: AxiosRequestConfig
-) {
+export async function get<T = any>(url: string, params?: any, config?: AxiosRequestConfig) {
     return http.get<T>(url, { params, ...(config || {}) });
 }
 
-export async function post<T = any>(
-    url: string,
-    body?: any,
-    config?: AxiosRequestConfig
-) {
+export async function post<T = any>(url: string, body?: any, config?: AxiosRequestConfig) {
     return http.post<T>(url, body, config);
 }
 
-export async function put<T = any>(
-    url: string,
-    body?: any,
-    config?: AxiosRequestConfig
-) {
+export async function put<T = any>(url: string, body?: any, config?: AxiosRequestConfig) {
     return http.put<T>(url, body, config);
 }
 
-export async function patch<T = any>(
-    url: string,
-    body?: any,
-    config?: AxiosRequestConfig
-) {
+export async function patch<T = any>(url: string, body?: any, config?: AxiosRequestConfig) {
     return http.patch<T>(url, body, config);
 }
 
@@ -143,9 +118,7 @@ export async function upload<T = any>(
         form.append("file", file);
     }
     if (extraFields) {
-        Object.entries(extraFields).forEach(([k, v]) =>
-            form.append(k, v as any)
-        );
+        Object.entries(extraFields).forEach(([k, v]) => form.append(k, v as any));
     }
     // 不手动设置 Content-Type，浏览器会为 FormData 自动附带带 boundary 的 multipart/form-data
     const cfg = { ...(config || {}) };

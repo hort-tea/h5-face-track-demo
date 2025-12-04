@@ -9,6 +9,44 @@
         <!-- Main Content -->
         <div class="p-4 bg-gray-50">
             <div class="bg-white p-6 rounded-lg shadow-sm">
+                <!-- type == 2 -->
+                <div
+                    class="text-red-500 font-bold mb-4"
+                    v-if="pageType === '2'"
+                >
+                    {{ userInfo.big_name }}
+                    {{
+                        userInfo.sexType === "1" ? "先生" : "女士"
+                    }}，您的台胞證申請經相關審核單位通知，相片不符相關規範，需重新上傳制證相片(大頭照)，請通過以下連結完成，如有疑慮，請洽本公司官方帳號或電話詢問，謝謝！
+                    <div
+                        class="text-center mt-4 flex items-center justify-center"
+                    >
+                        <span class="text-gray-700 text-sm">鏈接將於：</span>
+                        <van-count-down
+                            :time="dateTime"
+                            format="DD 天 HH 时 mm 分 ss 秒"
+                        />
+                        <span class="text-gray-700 text-sm">
+                            &nbsp;&nbsp;失效
+                        </span>
+                    </div>
+                </div>
+                <!-- type == 3 -->
+                <div
+                    class="text-red-500 font-bold mb-4"
+                    v-if="pageType === '3'"
+                >
+                    {{ userInfo.big_name }}
+                    {{ userInfo.sexType === "1" ? "先生" : "女士" }}，
+                    您的台胞證申請經相關審核單位通知，製證照片(大頭照)與提供的證件有差異，請通過以下連結完成身份驗證，如有疑慮，請洽本公司官方帳號或電話詢問，謝謝！
+                    <div class="text-center mt-4">
+                        鏈接失效時間：
+                        <van-count-down
+                            :time="dateTime"
+                            format="DD 天 HH 时 mm 分 ss 秒"
+                        />
+                    </div>
+                </div>
                 <!-- Alert -->
                 <div class="flex items-start bg-yellow-50 p-3 rounded-md">
                     <div
@@ -101,23 +139,30 @@
                         </p>
                     </div>
                 </div>
-                <!-- Action Buttons -->
-                <div class="mt-8 grid grid-cols-2 gap-4">
-                    <van-button
-                        type="primary"
-                        block
-                        @click="navigateTo('/upload')"
-                    >
-                        同意使用
-                    </van-button>
-                    <van-button
-                        type="default"
-                        block
-                    >
-                        離開
-                    </van-button>
+                <div class="text-sm text-gray-600 mt-4 text-red">
+                    本連結如操作失敗2次或上傳成功後將會失效，如需重新獲取連結請洽您的台胞證接洽窗口人員
                 </div>
             </div>
+        </div>
+        <div class="face-blok h-30"></div>
+        <!-- Action Buttons -->
+        <div
+            class="fixed left-0 right-0 bottom-0 bg-white p-4 grid grid-cols-2 gap-4"
+            style="padding-bottom: calc(env(safe-area-inset-bottom) + 1rem)"
+        >
+            <van-button
+                type="primary"
+                block
+                @click="navigateTo('/idCard')"
+            >
+                同意使用
+            </van-button>
+            <van-button
+                type="default"
+                block
+            >
+                離開
+            </van-button>
         </div>
         <van-dialog
             v-model:show="showPolicy"
@@ -182,7 +227,7 @@
                     class="max-w-full w-full h-auto"
                     @click="
                         showImagePreview({
-                            images: ['/image/gf.jpg'],
+                            images: [`${baseURL}/image/gf.jpg`],
                             closeable: true,
                         })
                     "
@@ -198,6 +243,9 @@
 
 <script setup>
 import { check_token } from "@/services/face";
+const {
+    app: { baseURL },
+} = useRuntimeConfig();
 const showPolicy = ref(false);
 const showPhotoRule = ref(false);
 const route = useRoute();
@@ -233,9 +281,10 @@ if (token || time) {
         });
     }
 }
+// 計算當前時間和時間戳間的差值
+const dateTime = Number(time) * 1000 - currentTime;
 // 验证时间是否过期
-const isExpired = currentTime > Number(time) * 1000;
-console.log(currentTime, time * 1000, isExpired);
+const isExpired = dateTime <= 0;
 if (isExpired) {
     router.replace({
         path: "auth",
@@ -244,7 +293,8 @@ if (isExpired) {
         },
     });
 }
-
+const userInfo = ref(null);
+const pageType = ref(null);
 if (
     token &&
     time &&
@@ -256,10 +306,27 @@ if (
 ) {
     check_token({ token })
         .then((res) => {
+            localStorage.setItem("age", res.result.age || 16);
             localStorage.setItem("token", res.result.token);
             localStorage.setItem("btoken", res.result.btoken);
             localStorage.setItem("pageType", res.result.type);
             localStorage.setItem("identity", res.result.identity);
+            localStorage.setItem(
+                "userInfo",
+                JSON.stringify({
+                    big_name: res.result.big_name,
+                    sex: res.result.sex === "1" ? "男" : "女",
+                    sexType: res.result.sex,
+                })
+            );
+            localStorage.setItem("pass_score", res.result.pass_score);
+            localStorage.setItem("height_score", res.result.height_score);
+            userInfo.value = JSON.parse(localStorage.getItem("userInfo"));
+            console.log(
+                JSON.parse(localStorage.getItem("userInfo")),
+                "用戶信息"
+            );
+            pageType.value = localStorage.getItem("pageType");
             let baidu = undefined;
             let callbackUrl = undefined;
             let localtionHref =
@@ -307,5 +374,9 @@ if (
 }
 .photo-dialog :deep(.van-dialog__content) {
     padding: 0;
+}
+:deep(.van-count-down) {
+    font-size: 0.9rem;
+    color: #ef4444;
 }
 </style>

@@ -5,12 +5,28 @@
             title="图片上传"
             left-text="返回"
             left-arrow
-            @click-left="navigateTo('/idCard', { replace: true })"
+            @click-left="navigateTo('/')"
         />
         <!-- 页面主体 -->
         <div class="p-4 bg-gray-50">
-            <PhotoStep :active="1" />
+            <PhotoStep :active="0" />
             <div class="bg-white rounded-lg shadow-sm p-4">
+                <!-- 输入身份证字号 -->
+                <div class="mb-4">
+                    <van-field
+                        :label-width="50"
+                        v-model="idNumber"
+                        :border="true"
+                        label="身份證"
+                        placeholder="請輸入身份證號"
+                        clearable
+                        input-align="left"
+                        :error="idNumberError"
+                        :error-message="idNumberErrorMessage"
+                        @input="handleIdNumberInput"
+                        @blur="handleIdNumberInput"
+                    />
+                </div>
                 <!-- 上传区域（自定义样式 + 使用 Vant Uploader） -->
                 <div
                     class="mt-4 flex flex-col items-center justify-center text-center select-none uploader-container"
@@ -22,7 +38,6 @@
                         result-type="file"
                         :multiple="false"
                         class="w-[201px] mx-auto"
-                        accept="image/*"
                     >
                         <template #default>
                             <!-- 如果有裁切后的图片，显示图片 -->
@@ -241,6 +256,9 @@ import { faceVerifyStep1 } from "@/services/face";
 import { ref, nextTick, computed, watch } from "vue";
 import { putImage } from "@/composables/idb";
 const fileList = ref([]); // 文件列表
+const idNumber = ref(""); // 身份证号
+const idNumberError = ref(false); // 身份证号错误状态
+const idNumberErrorMessage = ref(""); // 身份证号错误信息
 const cropperStyle = ref("default"); // 裁切框样式：default, elegant, colorful
 const cropperWrapRef = ref(null);
 const Croppers = ref(null);
@@ -253,8 +271,6 @@ const uploadProgress = ref(0);
 const croppedFile = ref(null);
 const pageType = ref(localStorage.getItem("pageType") || "");
 const isLandscape = ref(false);
-// 身份證號
-const idNumber = ref(localStorage.getItem("identity") || "");
 let orientationMql = null;
 let orientationChangeHandler = null;
 let windowOrientationHandler = null;
@@ -473,6 +489,13 @@ const validateIdNumber = (value) => {
     return { isValid: true, message: "" };
 };
 
+// 处理身份证号码输入
+const handleIdNumberInput = () => {
+    const validation = validateIdNumber(idNumber.value);
+    idNumberError.value = !validation.isValid;
+    idNumberErrorMessage.value = validation.message;
+};
+
 // 计算属性：判断是否可以上传
 const canUpload = computed(() => {
     const validation = validateIdNumber(idNumber.value);
@@ -488,6 +511,7 @@ const canUpload = computed(() => {
 });
 
 // 处理上传按钮点击
+const idNumberState = useState("useStateIdNumber", () => "");
 const handleUpload = async () => {
     // 先验证身份证号码
     const validation = validateIdNumber(idNumber.value);
@@ -496,40 +520,48 @@ const handleUpload = async () => {
         idNumberErrorMessage.value = validation.message;
         return;
     }
+
+    // 验证通过，存储身份证号码到状态管理
+    idNumberState.value = idNumber.value;
     if (!croppedFile.value && localStorage.getItem("pageType") != 3) {
         showToast("請先選擇相片");
         return;
     }
-    uploading.value = true;
+    uploading.value = localStorage.getItem("pageType") == 3 ? false : true;
     uploadProgress.value = 0;
-    try {
-        const payloadFile = croppedFile.value;
-        console.log(payloadFile, "payloadFile");
-        if (!payloadFile && localStorage.getItem("pageType") != 3) {
-            showToast("裁切文件無法讀取");
+    if (localStorage.getItem("pageType") == 3) {
+        if (localStorage.getItem("identity") != idNumber.value) {
+            showToast("验证失败：身份证号不一致");
             return;
+        } else {
+            const baidu = localStorage.getItem("baidu");
+            const callbackUrl = localStorage.getItem("callbackUrl");
+            //跳轉到百度
+            window.location.href =
+                baidu + "&callbackUrl=" + encodeURIComponent(callbackUrl);
+            // navigateTo("/beforeFace");
         }
-        const res = await faceVerifyStep1(payloadFile, idNumber.value, {
-            onUploadProgress: (e) => {
-                if (e.total) {
-                    uploadProgress.value = Math.round(
-                        (e.loaded / e.total) * 100
-                    );
-                }
-            },
-        });
-        // 在本地存储 faceVerifyStep1中 result的响应
-        localStorage.setItem("step1", JSON.stringify(res.result.data));
-        localStorage.setItem("step1Log", JSON.stringify(res.log_data));
-        // navigateTo("/beforeFace");
-        // 区分跳转 -- 先判断年龄--再区分类型
-        const age = Number(localStorage.getItem("age"));
-        if (!checkAgeRange(age)) {
-            navigateTo({
-                path: "/beforeFace",
+    } else {
+        try {
+            const payloadFile = croppedFile.value;
+            console.log(payloadFile, "payloadFile");
+            if (!payloadFile && localStorage.getItem("pageType") != 3) {
+                showToast("裁切文件無法讀取");
+                return;
+            }
+            const res = await faceVerifyStep1(payloadFile, idNumber.value, {
+                onUploadProgress: (e) => {
+                    if (e.total) {
+                        uploadProgress.value = Math.round(
+                            (e.loaded / e.total) * 100
+                        );
+                    }
+                },
             });
-        }
-        if (checkAgeRange(age)) {
+            // 在本地存储 faceVerifyStep1中 result的响应
+            localStorage.setItem("step1", JSON.stringify(res.result.data));
+            localStorage.setItem("step1Log", JSON.stringify(res.log_data));
+            // navigateTo("/beforeFace");
             const baidu = localStorage.getItem("baidu");
             let callbackUrl = localStorage.getItem("callbackUrl");
             callbackUrl = `${callbackUrl}&ppath=${
@@ -540,19 +572,20 @@ const handleUpload = async () => {
             console.log(
                 baidu + "&callbackUrl=" + encodeURIComponent(callbackUrl)
             );
-            // console.log(baidu + encodeURIComponent(callbackUrl));
+            console.log(baidu + encodeURIComponent(callbackUrl));
+            // debugger;
+        } catch (e) {
+            console.log(e, "e");
+            showToast(e.details.msg || "上傳失敗");
+        } finally {
+            uploading.value = false;
         }
-        // debugger;
-    } catch (e) {
-        console.log(e, "e");
-        showToast(e.details.msg || "上傳失敗");
-    } finally {
-        uploading.value = false;
     }
 };
 
 // 处理文件上传
 const handleFileUpload = (file) => {
+    console.log("上传的文件:", file); // 调试用
     // Vant Uploader 传递的是一个包含 file 属性的对象
     const actualFile = file.file || file;
     if (actualFile && actualFile instanceof File) {

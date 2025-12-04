@@ -1,15 +1,9 @@
 <template>
     <!-- 横屏遮罩提示：检测到横屏时显示，提示开启方向锁定并切回竖屏 -->
-    <van-overlay
-        :show="showOrientationMask && !orientationSupported"
-        :z-index="9998"
-        class="orientation-overlay"
-    >
+    <van-overlay :show="showOrientationMask && !orientationSupported" :z-index="9998" class="orientation-overlay">
         <div class="orientation-content">
             <div class="phone-icon"></div>
-            <div class="tip-text">
-                當前為橫屏，請豎屏後開啟系統方向鎖定後再橫屏
-            </div>
+            <div class="tip-text">當前為橫屏，請豎屏後開啟系統方向鎖定後再橫屏</div>
         </div>
     </van-overlay>
     <!-- 用于屏幕未旋转时的样式 -->
@@ -28,30 +22,11 @@
             top: `${rotateRightNum}px`,
         }"
     >
-        <van-nav-bar
-            title=""
-            left-text="申請人簽名(註:未成年請簽監護人姓名)"
-            right-text=""
-            left-arrow
-            @click-left="goBackTwo"
-        >
+        <van-nav-bar title="" left-text="申請人簽名(註:未成年請簽監護人姓名)" right-text="" left-arrow @click-left="goBackTwo">
             <template #right>
                 <div class="flex gap-2 items-center px-4">
-                    <van-button
-                        size="small"
-                        type="warning"
-                        plain
-                        @click="canvasClear"
-                    >
-                        重簽
-                    </van-button>
-                    <van-button
-                        size="small"
-                        type="primary"
-                        @click="saveAsImg"
-                    >
-                        確定
-                    </van-button>
+                    <van-button size="small" type="warning" plain @click="canvasClear">重簽</van-button>
+                    <van-button size="small" type="primary" @click="saveAsImg">確定</van-button>
                 </div>
             </template>
         </van-nav-bar>
@@ -74,11 +49,9 @@
                 }"
             ></SignCanvasPlus>
             <!-- 居中背景提示文字 -->
-            <div
-                class="sign-overlay-text"
-                v-show="showOverlay"
-            >
+            <div class="sign-overlay-text" v-show="showOverlay">
                 <div class="overlay-inner">
+                    <div v-if="computedAge" class="text-lg">未成年請簽監護人姓名</div>
                     <div>請在此區域內簽名</div>
                     <div>中文正楷簽名</div>
                 </div>
@@ -205,30 +178,11 @@
     </div>
     <!-- 用于屏幕旋转时的样式 -->
     <div v-else>
-        <van-nav-bar
-            title=""
-            left-text="申請人簽名(註:未成年請簽監護人姓名)"
-            right-text=""
-            left-arrow
-            @click-left="goBackTwo"
-        >
+        <van-nav-bar title="" left-text="申請人簽名(註:未成年請簽監護人姓名)" right-text="" left-arrow @click-left="goBackTwo">
             <template #right>
                 <div class="flex gap-2 items-center px-4">
-                    <van-button
-                        size="small"
-                        type="warning"
-                        plain
-                        @click="canvasClear"
-                    >
-                        重簽
-                    </van-button>
-                    <van-button
-                        size="small"
-                        type="primary"
-                        @click="saveAsImg"
-                    >
-                        確定
-                    </van-button>
+                    <van-button size="small" type="warning" plain @click="canvasClear">重簽</van-button>
+                    <van-button size="small" type="primary" @click="saveAsImg">確定</van-button>
                 </div>
             </template>
         </van-nav-bar>
@@ -248,11 +202,9 @@
                     background: '#f9f9f9 !important',
                 }"
             ></SignCanvasPlus>
-            <div
-                class="sign-overlay-text"
-                v-show="showOverlay"
-            >
+            <div class="sign-overlay-text" v-show="showOverlay">
                 <div class="overlay-inner">
+                    <span v-if="computedAge" class="text-lg">未成年請簽監護人姓名</span>
                     <div>請在此區域內簽名</div>
                     <div>中文正楷簽名</div>
                 </div>
@@ -262,7 +214,8 @@
 </template>
 <script lang="ts" setup>
 import SignCanvasPlus, { IOptions } from "sign-canvas-plus";
-
+const age = ref(localStorage.getItem("age") || "");
+const computedAge = computed(() => age.value < 16);
 const router = useRouter();
 const goBackTwo = () => {
     router.go(-1);
@@ -287,27 +240,19 @@ onMounted(() => {
     isRotate.value = window.innerWidth > window.innerHeight;
     renderOptions();
     // 動態插入 viewport meta
-    const existing = Array.from(
-        document.head.querySelectorAll('meta[name="viewport"]')
-    ).find((m) =>
-        (m.getAttribute("content") || "").includes("orientation=portrait")
-    );
+    const existing = Array.from(document.head.querySelectorAll('meta[name="viewport"]')).find((m) => (m.getAttribute("content") || "").includes("orientation=portrait"));
     if (existing) {
         metaViewportRef.value = existing as HTMLMetaElement;
     } else {
         const meta = document.createElement("meta");
         meta.setAttribute("name", "viewport");
-        meta.setAttribute(
-            "content",
-            "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, orientation=portrait"
-        );
+        meta.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, orientation=portrait");
         document.head.appendChild(meta);
         metaViewportRef.value = meta;
     }
     const initOrientationWatch = () => {
         try {
-            orientationSupported.value =
-                "orientation" in screen && screen.orientation !== null;
+            orientationSupported.value = "orientation" in screen && screen.orientation !== null;
             orientationMql = window.matchMedia("(orientation: landscape)");
             const apply = (matches: boolean) => {
                 showOrientationMask.value = matches;
@@ -324,10 +269,7 @@ onMounted(() => {
             if (orientationMql.addListener) {
                 orientationMql.addListener(orientationChangeHandler);
             } else if (orientationMql.addEventListener) {
-                orientationMql.addEventListener(
-                    "change",
-                    orientationChangeHandler
-                );
+                orientationMql.addEventListener("change", orientationChangeHandler);
             }
 
             // 作为兜底，监听窗口尺寸变化
@@ -346,11 +288,7 @@ onMounted(() => {
                 onOrientationUpdated();
                 rotateEventId.value++;
             };
-            window.addEventListener(
-                "orientationchange",
-                windowOrientationHandler,
-                { passive: true }
-            );
+            window.addEventListener("orientationchange", windowOrientationHandler, { passive: true });
         } catch (err) {
             const landscapeInit = window.innerWidth > window.innerHeight;
             showOrientationMask.value = landscapeInit;
@@ -372,12 +310,8 @@ onMounted(() => {
     rotateLeftNum.value = (screenWidth.value - screenHeight.value) / 2;
     rotateRightNum.value = (screenHeight.value - screenWidth.value) / 2;
 });
-const rotateRightNum: Ref<number> = ref(
-    (screenHeight.value - screenWidth.value) / 2
-);
-const rotateLeftNum: Ref<number> = ref(
-    (screenWidth.value - screenHeight.value) / 2
-);
+const rotateRightNum: Ref<number> = ref((screenHeight.value - screenWidth.value) / 2);
+const rotateLeftNum: Ref<number> = ref((screenWidth.value - screenHeight.value) / 2);
 const pageContainerRef = ref<HTMLDivElement | null>(null);
 const rotateEventId = ref(0);
 watch(
@@ -471,9 +405,7 @@ const canvasClear = () => {
 const trimTransparent = (src: string, padding = 16): Promise<string> => {
     return new Promise((resolve) => {
         const s = String(src).replace(/^\//, "");
-        const dataUrl = s.startsWith("data:")
-            ? s
-            : `data:image/png;base64,${s}`;
+        const dataUrl = s.startsWith("data:") ? s : `data:image/png;base64,${s}`;
         const image = new Image();
         image.onload = () => {
             const canvas = document.createElement("canvas");
@@ -537,9 +469,7 @@ const saveAsImg = async () => {
         try {
             const rotated = await new Promise<string>((resolve) => {
                 const s = String(img).replace(/^\//, "");
-                const src = s.startsWith("data:")
-                    ? s
-                    : `data:image/png;base64,${s}`;
+                const src = s.startsWith("data:") ? s : `data:image/png;base64,${s}`;
                 const image = new Image();
                 image.onload = () => {
                     const canvas = document.createElement("canvas");
@@ -562,9 +492,7 @@ const saveAsImg = async () => {
         img = await trimTransparent(img, 24);
     } catch {}
     try {
-        const existingSignatures = JSON.parse(
-            localStorage.getItem("signature_list") || "[]"
-        );
+        const existingSignatures = JSON.parse(localStorage.getItem("signature_list") || "[]");
         existingSignatures.forEach((item) => {
             localStorage.removeItem(item.key);
         });
@@ -578,10 +506,7 @@ const saveAsImg = async () => {
                 date: new Date().toLocaleString(),
             },
         ];
-        localStorage.setItem(
-            "signature_list",
-            JSON.stringify(currentSignature)
-        );
+        localStorage.setItem("signature_list", JSON.stringify(currentSignature));
         navigateTo("/confirm");
     } catch (error) {
         console.error("保存签名到本地存储失败:", error);
@@ -601,10 +526,7 @@ onUnmounted(() => {
                 if (orientationMql.removeListener) {
                     orientationMql.removeListener(orientationChangeHandler);
                 } else if (orientationMql.removeEventListener) {
-                    orientationMql.removeEventListener(
-                        "change",
-                        orientationChangeHandler
-                    );
+                    orientationMql.removeEventListener("change", orientationChangeHandler);
                 }
             }
         }
@@ -612,10 +534,7 @@ onUnmounted(() => {
             window.removeEventListener("resize", resizeHandler);
         }
         if (windowOrientationHandler) {
-            window.removeEventListener(
-                "orientationchange",
-                windowOrientationHandler
-            );
+            window.removeEventListener("orientationchange", windowOrientationHandler);
         }
     } catch {}
 });
